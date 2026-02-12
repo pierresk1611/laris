@@ -9,7 +9,8 @@ import {
     Maximize2,
     FileText,
     Type,
-    ImageIcon
+    ImageIcon,
+    ScanSearch
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
