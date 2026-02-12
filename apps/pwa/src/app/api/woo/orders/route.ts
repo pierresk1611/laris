@@ -46,7 +46,8 @@ export async function GET() {
         console.error("WooCommerce fetch error:", error);
         return NextResponse.json({
             success: false,
-            error: error.message || "Failed to fetch orders from WooCommerce"
+            error: "Failed to fetch orders from WooCommerce",
+            details: error.message
         }, { status: 500 });
     }
 }
