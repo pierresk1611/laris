@@ -9,8 +9,8 @@ export async function GET() {
             orderBy: { createdAt: 'desc' }
         });
         return NextResponse.json({ success: true, shops });
-    } catch (error) {
-        return NextResponse.json({ success: false, error: 'Database error' }, { status: 503 });
+    } catch (error: any) {
+        return NextResponse.json({ success: false, error: 'Database error', details: error.message }, { status: 503 });
     }
 }
 
@@ -23,8 +23,8 @@ export async function POST(request: Request) {
         });
 
         return NextResponse.json({ success: true, shop });
-    } catch (error) {
-        return NextResponse.json({ success: false, error: 'Failed to add shop' }, { status: 400 });
+    } catch (error: any) {
+        return NextResponse.json({ success: false, error: 'Failed to add shop', details: error.message }, { status: 400 });
     }
 }
 
@@ -37,8 +37,8 @@ export async function DELETE(request: Request) {
 
         await prisma.shop.delete({ where: { id } });
         return NextResponse.json({ success: true });
-    } catch (error) {
-        return NextResponse.json({ success: false, error: 'Delete failed' }, { status: 400 });
+    } catch (error: any) {
+        return NextResponse.json({ success: false, error: 'Delete failed', details: error.message }, { status: 400 });
     }
 }
 
@@ -53,7 +53,7 @@ export async function PATCH(request: Request) {
         });
 
         return NextResponse.json({ success: true, shop });
-    } catch (error) {
-        return NextResponse.json({ success: false, error: 'Update failed' }, { status: 400 });
+    } catch (error: any) {
+        return NextResponse.json({ success: false, error: 'Update failed', details: error.message }, { status: 400 });
     }
 }

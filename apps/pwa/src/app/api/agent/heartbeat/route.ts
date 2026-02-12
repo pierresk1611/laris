@@ -18,8 +18,13 @@ export async function GET() {
             lastSeen: latestStatus?.lastSeen || null,
             details: latestStatus
         });
-    } catch (error) {
-        return NextResponse.json({ online: false, error: 'Database not accessible' }, { status: 503 });
+    } catch (error: any) {
+        console.error("Heartbeat error:", error);
+        return NextResponse.json({
+            online: false,
+            error: 'Database error',
+            details: error.message
+        }, { status: 503 });
     }
 }
 
