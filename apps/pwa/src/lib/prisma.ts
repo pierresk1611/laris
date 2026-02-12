@@ -5,11 +5,12 @@ const globalForPrisma = global as unknown as { prisma: PrismaClient };
 // Prevents Prisma from crashing during Next.js build module evaluation if DATABASE_URL is missing
 const createPrismaClient = () => {
     if (typeof window === 'undefined' && !process.env.DATABASE_URL) {
-        console.warn('Prisma: DATABASE_URL is missing. Skipping client instantiation during build evaluation.');
+        console.warn('Prisma: DATABASE_URL is missing.');
     }
-    return new PrismaClient({
-        log: ['query'],
+    const client = new PrismaClient({
+        log: ['query', 'info', 'warn', 'error'],
     });
+    return client;
 };
 
 export const prisma = globalForPrisma.prisma || createPrismaClient();

@@ -8,30 +8,32 @@ export async function GET() {
         // Try a simple query
         await prisma.$queryRaw`SELECT 1`;
 
-        // Try to get some metadata without exposing sensitive info
-        const url = process.env.DATABASE_URL || 'MISSING';
-        const maskedUrl = url.replace(/:[^:@]+@/, ':****@');
-        const hostMatch = url.match(/@([^:/?#]+)/);
-        const host = hostMatch ? hostMatch[1] : 'unknown';
+        const dbUrl = process.env.DATABASE_URL || 'MISSING';
+        const directUrl = process.env.DIRECT_URL || 'MISSING';
+
+        const mask = (url: string) => url.replace(/:[^:@]+@/, ':****@').replace(/@([^:/?#]+)/, '@[HOST]');
+        const getHost = (url: string) => url.match(/@([^:/?#]+)/)?.[1] || 'unknown';
 
         return NextResponse.json({
             success: true,
             status: 'Connected',
-            host: host,
-            masked_url: maskedUrl,
+            database_url_host: getHost(dbUrl),
+            direct_url_host: getHost(directUrl),
+            masked_database_url: mask(dbUrl),
             env_keys: Object.keys(process.env).filter(k => k.includes('URL') || k.includes('DB'))
         });
     } catch (error: any) {
-        const url = process.env.DATABASE_URL || 'MISSING';
-        const hostMatch = url.match(/@([^:/?#]+)/);
-        const host = hostMatch ? hostMatch[1] : 'unknown';
+        const dbUrl = process.env.DATABASE_URL || 'MISSING';
+        const directUrl = process.env.DIRECT_URL || 'MISSING';
+        const getHost = (url: string) => url.match(/@([^:/?#]+)/)?.[1] || 'unknown';
 
         return NextResponse.json({
             success: false,
             status: 'Disconnected',
             error: error.message,
-            detected_host: host,
+            detected_db_host: getHost(dbUrl),
+            detected_direct_host: getHost(directUrl),
             env_keys: Object.keys(process.env).filter(k => k.includes('URL') || k.includes('DB'))
-        }, { status: 500 });
+        }, { status: 200 }); // Return 200 so we can actually see the JSON body easily
     }
 }
