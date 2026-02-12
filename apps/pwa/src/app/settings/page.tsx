@@ -7,7 +7,9 @@ import {
     Database,
     Cpu,
     Terminal,
-    Save
+    Save,
+    Plus,
+    Trash2
 } from "lucide-react";
 import { useState } from "react";
 
@@ -35,8 +37,8 @@ export default function SettingsPage() {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${isActive
-                                    ? "bg-white text-blue-600 shadow-sm"
-                                    : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
+                                ? "bg-white text-blue-600 shadow-sm"
+                                : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
                                 }`}
                         >
                             <Icon size={16} />
@@ -77,36 +79,77 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                {/* WooCommerce Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-6 border-b border-slate-50">
+                {/* Stores Management */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden md:col-span-2">
+                    <div className="p-6 border-b border-slate-50 flex justify-between items-center">
                         <h2 className="text-lg font-bold text-slate-900 flex items-center gap-3">
                             <Globe className="text-blue-500" size={20} />
-                            <span>WooCommerce (WP Connector)</span>
+                            <span>Prepojené E-shopy (WooCommerce)</span>
                         </h2>
+                        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-blue-700 transition-colors">
+                            <Plus size={14} />
+                            <span>Pridať ďalší e-shop</span>
+                        </button>
                     </div>
-                    <div className="p-8 space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Store URL</label>
-                            <input
-                                type="text"
-                                placeholder="https://vasha-stranka.sk"
-                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
-                            />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
+                    <div className="p-8 space-y-8">
+                        {/* Shop 1 */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 p-6 bg-slate-50 rounded-2xl border border-slate-100 relative group">
+                            <button className="absolute top-4 right-4 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500">
+                                <Trash2 size={16} />
+                            </button>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Store Name / URL</label>
+                                <input
+                                    type="text"
+                                    defaultValue="https://svadobky.sk"
+                                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                />
+                            </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Consumer Key</label>
                                 <input
                                     type="password"
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
+                                    defaultValue="ck_**********************"
+                                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                 />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Consumer Secret</label>
                                 <input
                                     type="password"
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
+                                    defaultValue="cs_**********************"
+                                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Shop 2 */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 p-6 bg-slate-50 rounded-2xl border border-slate-100 relative group">
+                            <button className="absolute top-4 right-4 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500">
+                                <Trash2 size={16} />
+                            </button>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Store Name / URL</label>
+                                <input
+                                    type="text"
+                                    defaultValue="https://mirkadesign.cz"
+                                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Consumer Key</label>
+                                <input
+                                    type="password"
+                                    defaultValue="ck_**********************"
+                                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Consumer Secret</label>
+                                <input
+                                    type="password"
+                                    defaultValue="cs_**********************"
+                                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                 />
                             </div>
                         </div>

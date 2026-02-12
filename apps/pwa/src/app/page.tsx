@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import {
   ScanSearch,
@@ -17,9 +18,36 @@ const stats = [
 ];
 
 const mockOrders = [
-  { id: "#4532", customer: "Jana M.", template: "JSO 15", aiStatus: "PARSED", status: "READY_FOR_PRINT" },
-  { id: "#4531", customer: "Marek K.", template: "VSO 02", aiStatus: "PENDING", status: "PROCESSING" },
-  { id: "#4530", customer: "Anna B.", template: "JSO 22", aiStatus: "FAILED", status: "ERROR" },
+  {
+    id: "#4532",
+    customer: "Jana M.",
+    template: "JSO 15",
+    aiStatus: "PARSED",
+    status: "READY_FOR_PRINT",
+    shop: "Svadobky.sk",
+    quantity: 50,
+    preview: "/placeholder-item.jpg"
+  },
+  {
+    id: "#4531",
+    customer: "Marek K.",
+    template: "VSO 02",
+    aiStatus: "PENDING",
+    status: "PROCESSING",
+    shop: "MirkaDesign.cz",
+    quantity: 20,
+    preview: "/placeholder-item.jpg"
+  },
+  {
+    id: "#4530",
+    customer: "Anna B.",
+    template: "JSO 22",
+    aiStatus: "FAILED",
+    status: "ERROR",
+    shop: "Svadobky.sk",
+    quantity: 100,
+    preview: "/placeholder-item.jpg"
+  },
 ];
 
 export default function Dashboard() {
@@ -52,16 +80,18 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex justify-between items-center">
           <h2 className="text-lg font-bold text-slate-900">Aktuálne fronty</h2>
-          <button className="text-xs font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider">
+          <Link href="/orders" className="text-xs font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider">
             Zobraziť všetko
-          </button>
+          </Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50">
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest w-16">Náhľad</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID / Zdroj</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Zákazník</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Ks</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Šablóna</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stav AI</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Akcia</th>
@@ -70,8 +100,23 @@ export default function Dashboard() {
             <tbody className="divide-y divide-slate-100">
               {mockOrders.map((order) => (
                 <tr key={order.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-6 py-4 font-bold text-slate-900">{order.id}</td>
-                  <td className="px-6 py-4 text-slate-600">{order.customer}</td>
+                  <td className="px-6 py-4">
+                    <div className="w-10 h-10 bg-slate-200 rounded-lg overflow-hidden border border-slate-200">
+                      <div className="w-full h-full flex items-center justify-center text-[8px] text-slate-400 font-bold uppercase">Image</div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col">
+                      <span className="font-bold text-slate-900">{order.id}</span>
+                      <span className="text-[10px] font-bold text-blue-500 uppercase">{order.shop}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-slate-600 font-medium">{order.customer}</td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="px-2 py-1 bg-slate-100 rounded text-xs font-bold text-slate-700">
+                      {order.quantity}
+                    </span>
+                  </td>
                   <td className="px-6 py-4">
                     <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-bold text-slate-600 uppercase">
                       {order.template}
@@ -84,10 +129,10 @@ export default function Dashboard() {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
+                    <Link href={`/orders/${order.id.replace('#', '')}`} className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
                       <span>Skontrolovať</span>
                       <ExternalLink size={14} />
-                    </button>
+                    </Link>
                   </td>
                 </tr>
               ))}
