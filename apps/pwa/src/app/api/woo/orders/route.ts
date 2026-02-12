@@ -13,6 +13,15 @@ export async function GET() {
         // For now, fetch from the first configured shop
         const shop = shops[0];
 
+        // Validation: If shop is empty or missing credentials, return empty orders instead of crashing
+        if (!shop.url || !shop.ck || !shop.cs) {
+            return NextResponse.json({
+                success: true,
+                orders: [],
+                message: "Shop configuration incomplete (URL or Keys missing)"
+            });
+        }
+
         // Remove trailing slash if present
         const baseUrl = shop.url.replace(/\/$/, "");
         const apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${shop.ck}&consumer_secret=${shop.cs}&per_page=10`;
