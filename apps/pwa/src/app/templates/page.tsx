@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
 import {
     Layers,
@@ -10,6 +10,8 @@ import {
     FolderOpen,
     FileText
 } from "lucide-react";
+import Papa from "papaparse";
+import { extractTemplateKey } from "@/lib/parser";
 
 interface Template {
     key: string;
@@ -17,6 +19,7 @@ interface Template {
     mappedPaths: number;
     status: string;
     matched: boolean;
+    matchCount?: number;
 }
 
 const initialTemplates: Template[] = [
@@ -32,26 +35,55 @@ export default function TemplatesPage() {
 
     const handleDropboxSync = async () => {
         setIsSyncing(true);
-        // Simulate API call to /api/dropbox
-        setTimeout(() => {
+        try {
+            // In a real scenario, this would call our /api/dropbox route
+            const response = await fetch('/api/dropbox');
+            const data = await response.json();
+            console.log('Dropbox sync response:', data);
+
+            // For now, we simulate finding "new" templates if they weren't in initial list
+            // or just refreshing the status
+            setTimeout(() => {
+                setIsSyncing(false);
+            }, 1500);
+        } catch (error) {
+            console.error('Dropbox sync failed:', error);
             setIsSyncing(false);
-            // In a real app, this would refresh the list from the database
-        }, 2000);
+        }
     };
 
     const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        // Simulate CSV parsing and matching
-        const matchedKeys = ["JSO 22", "VSO 02"]; // Mocked matched keys from CSV
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                const rows = results.data as any[];
+                const foundKeys: Record<string, number> = {};
 
-        const updatedTemplates = templates.map((t: Template) => ({
-            ...t,
-            matched: matchedKeys.includes(t.key)
-        })).sort((a: Template, b: Template) => (b.matched ? 1 : 0) - (a.matched ? 1 : 0));
+                rows.forEach(row => {
+                    // Search all columns for pattern JSO XX / VSO XX
+                    Object.values(row).forEach(val => {
+                        if (typeof val === 'string') {
+                            const key = extractTemplateKey(val);
+                            if (key) {
+                                foundKeys[key] = (foundKeys[key] || 0) + 1;
+                            }
+                        }
+                    });
+                });
 
-        setTemplates(updatedTemplates);
+                const updatedTemplates = templates.map((t: Template) => ({
+                    ...t,
+                    matched: !!foundKeys[t.key],
+                    matchCount: foundKeys[t.key] || 0
+                })).sort((a: Template, b: Template) => (b.matchCount || 0) - (a.matchCount || 0));
+
+                setTemplates(updatedTemplates);
+            }
+        });
     };
 
     return (
@@ -99,8 +131,8 @@ export default function TemplatesPage() {
                 {templates.map((template: Template) => (
                     <div key={template.key} className={`bg-white rounded-3xl border transition-all group p-6 relative overflow-hidden ${template.matched ? 'border-blue-200 shadow-blue-100 ring-1 ring-blue-100' : 'border-slate-100 shadow-sm'}`}>
                         {template.matched && (
-                            <div className="absolute top-0 right-0 px-3 py-1 bg-blue-500 text-white text-[8px] font-black uppercase tracking-tighter rounded-bl-xl">
-                                Zhoda v CSV
+                            <div className="absolute top-0 right-0 px-3 py-1 bg-blue-500 text-white text-[8px] font-black uppercase tracking-tighter rounded-bl-xl shadow-sm">
+                                {template.matchCount} ks v CSV
                             </div>
                         )}
 
