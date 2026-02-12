@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Shop {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  ck        String
+  cs        String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Template {
+  id           String   @id @default(cuid())
+  key          String   @unique // e.g., JSO 15
+  name         String
+  mappedPaths  Int      @default(0)
+  mappingData  Json?    // Stores the PSD layer to field mappings
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Job {
+  id        String   @id @default(cuid())
+  type      String   // e.g., LOAD_LAYERS, RENDER_PSD
+  payload   Json?
+  status    String   @default("PENDING") // PENDING, SUCCESS, ERROR
+  result    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AgentStatus {
+  id          String   @id @default(cuid())
+  lastSeen    DateTime @default(now())
+  status      String   @default("ONLINE")
+  version     String?
+  os          String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

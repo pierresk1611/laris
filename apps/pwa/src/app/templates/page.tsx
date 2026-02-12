@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
+import Link from "next/link";
 import {
     Layers,
     Search,
@@ -129,38 +130,40 @@ export default function TemplatesPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {templates.map((template: Template) => (
-                    <div key={template.key} className={`bg-white rounded-3xl border transition-all group p-6 relative overflow-hidden ${template.matched ? 'border-blue-200 shadow-blue-100 ring-1 ring-blue-100' : 'border-slate-100 shadow-sm'}`}>
-                        {template.matched && (
-                            <div className="absolute top-0 right-0 px-3 py-1 bg-blue-500 text-white text-[8px] font-black uppercase tracking-tighter rounded-bl-xl shadow-sm">
-                                {template.matchCount} ks v CSV
-                            </div>
-                        )}
+                    <Link href={`/templates/${encodeURIComponent(template.key)}`} key={template.key}>
+                        <div className={`cursor-pointer bg-white rounded-3xl border transition-all group p-6 relative overflow-hidden h-full ${template.matched ? 'border-blue-200 shadow-blue-100 ring-1 ring-blue-100' : 'border-slate-100 shadow-sm hover:shadow-md'}`}>
+                            {template.matched && (
+                                <div className="absolute top-0 right-0 px-3 py-1 bg-blue-500 text-white text-[8px] font-black uppercase tracking-tighter rounded-bl-xl shadow-sm">
+                                    {template.matchCount} ks v CSV
+                                </div>
+                            )}
 
-                        <div className="flex justify-between items-start mb-4">
-                            <div className={`p-3 rounded-2xl transition-colors ${template.matched ? 'bg-blue-50' : 'bg-slate-50 group-hover:bg-blue-50'}`}>
-                                <Layers className={`${template.matched ? 'text-blue-500' : 'text-slate-400 group-hover:text-blue-500'}`} size={24} />
+                            <div className="flex justify-between items-start mb-4">
+                                <div className={`p-3 rounded-2xl transition-colors ${template.matched ? 'bg-blue-50' : 'bg-slate-50 group-hover:bg-blue-50'}`}>
+                                    <Layers className={`${template.matched ? 'text-blue-500' : 'text-slate-400 group-hover:text-blue-500'}`} size={24} />
+                                </div>
+                                <button className="p-2 text-slate-400 hover:text-slate-600">
+                                    <MoreHorizontal size={20} />
+                                </button>
                             </div>
-                            <button className="p-2 text-slate-400 hover:text-slate-600">
-                                <MoreHorizontal size={20} />
-                            </button>
+
+                            <h3 className="text-lg font-black text-slate-900 mb-1">{template.key}</h3>
+                            <p className="text-sm font-medium text-slate-500 mb-6">{template.name}</p>
+
+                            <div className="flex items-center justify-between pt-6 border-t border-slate-50 mt-auto">
+                                <div className="flex items-center gap-2">
+                                    <FolderOpen size={14} className="text-slate-400" />
+                                    <span className="text-xs font-bold text-slate-600">{template.mappedPaths} polí namapovaných</span>
+                                </div>
+                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${template.status === 'ACTIVE'
+                                    ? 'bg-green-100 text-green-600'
+                                    : 'bg-red-100 text-red-600'
+                                    }`}>
+                                    {template.status === 'ACTIVE' ? 'Aktívna' : 'Bez manifestu'}
+                                </span>
+                            </div>
                         </div>
-
-                        <h3 className="text-lg font-black text-slate-900 mb-1">{template.key}</h3>
-                        <p className="text-sm font-medium text-slate-500 mb-6">{template.name}</p>
-
-                        <div className="flex items-center justify-between pt-6 border-t border-slate-50">
-                            <div className="flex items-center gap-2">
-                                <FolderOpen size={14} className="text-slate-400" />
-                                <span className="text-xs font-bold text-slate-600">{template.mappedPaths} polí namapovaných</span>
-                            </div>
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${template.status === 'ACTIVE'
-                                ? 'bg-green-100 text-green-600'
-                                : 'bg-red-100 text-red-600'
-                                }`}>
-                                {template.status === 'ACTIVE' ? 'Aktívna' : 'Bez manifestu'}
-                            </span>
-                        </div>
-                    </div>
+                    </Link>
                 ))}
             </div>
         </div>

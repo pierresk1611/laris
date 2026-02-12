@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
 import {
   ScanSearch,
@@ -51,6 +52,29 @@ const mockOrders = [
 ];
 
 export default function Dashboard() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const res = await fetch('/api/woo/orders');
+        const data = await res.json();
+        if (data.success) {
+          setOrders(data.orders);
+        } else {
+          setError(data.error);
+        }
+      } catch (e) {
+        setError("Nepodarilo sa pripojiť k e-shopu.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchOrders();
+  }, []);
+
   return (
     <div>
       <AppHeader title="Prehľad" />
@@ -68,7 +92,7 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
-                  <p className="text-2xl font-black text-slate-900">{stat.value}</p>
+                  <p className="text-2xl font-black text-slate-900">{stat.label === "Nové objednávky" ? orders.length : stat.value}</p>
                 </div>
               </div>
             </div>
@@ -84,61 +108,84 @@ export default function Dashboard() {
             Zobraziť všetko
           </Link>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50">
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest w-16">Náhľad</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID / Zdroj</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Zákazník</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Ks</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Šablóna</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stav AI</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Akcia</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {mockOrders.map((order) => (
-                <tr key={order.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-6 py-4">
-                    <div className="w-10 h-10 bg-slate-200 rounded-lg overflow-hidden border border-slate-200">
-                      <div className="w-full h-full flex items-center justify-center text-[8px] text-slate-400 font-bold uppercase">Image</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-slate-900">{order.id}</span>
-                      <span className="text-[10px] font-bold text-blue-500 uppercase">{order.shop}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-slate-600 font-medium">{order.customer}</td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="px-2 py-1 bg-slate-100 rounded text-xs font-bold text-slate-700">
-                      {order.quantity}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-bold text-slate-600 uppercase">
-                      {order.template}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${order.aiStatus === 'PARSED' ? 'bg-green-500' : order.aiStatus === 'FAILED' ? 'bg-red-500' : 'bg-orange-400'}`} />
-                      <span className="text-sm font-medium text-slate-600">{order.aiStatus}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <Link href={`/orders/${order.id.replace('#', '')}`} className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
-                      <span>Skontrolovať</span>
-                      <ExternalLink size={14} />
-                    </Link>
-                  </td>
+
+        {isLoading ? (
+          <div className="p-12 text-center text-slate-400">
+            <div className="animate-spin mb-4 inline-block text-blue-600">
+              <Clock size={32} />
+            </div>
+            <p className="font-bold">Načítavam dáta z e-shopu...</p>
+          </div>
+        ) : error ? (
+          <div className="p-12 text-center text-red-400">
+            <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
+            <p className="font-bold">Chyba pripojenia</p>
+            <p className="text-sm">{error}</p>
+            <Link href="/settings" className="mt-4 inline-block text-xs font-bold text-blue-600 uppercase underline">Skontrolovať API kľúče</Link>
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="p-12 text-center text-slate-400">
+            <ScanSearch size={48} className="mx-auto mb-4 opacity-10" />
+            <p className="font-bold">Žiadne nové objednávky</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50">
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest w-16">Náhľad</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID / Zdroj</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Zákazník</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Ks</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Položka</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Akcia</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {orders.map((order) => (
+                  <tr key={order.id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
+                        <ScanSearch size={16} className="text-slate-300" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-900">#{order.number}</span>
+                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter truncate w-24">Live Store</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-600 font-medium">{order.customer}</td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="px-2 py-1 bg-slate-100 rounded text-xs font-bold text-slate-700">
+                        {order.items?.reduce((acc: number, item: any) => acc + item.quantity, 0) || 0}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="max-w-[200px]">
+                        <p className="text-xs font-bold text-slate-900 truncate">{order.items?.[0]?.name || 'Neznáma položka'}</p>
+                        {order.items?.length > 1 && <p className="text-[10px] text-slate-400 font-medium">+ ďalších {order.items.length - 1} položiek</p>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${order.status === 'processing' ? 'bg-orange-400' : 'bg-green-500'}`} />
+                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{order.status}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <Link href={`/orders/${order.id}`} className="inline-flex items-center gap-2 px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors shadow-sm">
+                        <span>Otvoriť</span>
+                        <ExternalLink size={14} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

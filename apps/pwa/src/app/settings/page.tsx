@@ -9,7 +9,9 @@ import {
     Terminal,
     Save,
     Plus,
-    Trash2
+    Trash2,
+    Activity,
+    Check
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -24,48 +26,98 @@ export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('general');
     const [shops, setShops] = useState<Shop[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [isSaving, setIsSaving] = useState<string | null>(null);
+    const [connectionStatus, setConnectionStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({});
 
-    // Initial load from localStorage
-    useEffect(() => {
-        const savedShops = localStorage.getItem('laris_shops');
-        if (savedShops) {
-            try {
-                setShops(JSON.parse(savedShops));
-            } catch (e) {
-                console.error("Failed to parse shops", e);
+    // Initial load from Server DB
+    const fetchShops = async () => {
+        try {
+            const res = await fetch('/api/shops');
+            const data = await res.json();
+            if (data.success) {
+                setShops(data.shops);
             }
-        } else {
-            // Default initial shops if none saved
-            setShops([
-                { id: '1', url: 'https://svadobky.sk', ck: 'ck_**********', cs: 'cs_**********' },
-                { id: '2', url: 'https://mirkadesign.cz', ck: 'ck_**********', cs: 'cs_**********' }
-            ]);
+        } catch (e) {
+            console.error("Failed to fetch shops", e);
+        } finally {
+            setIsLoaded(true);
         }
-        setIsLoaded(true);
+    };
+
+    useEffect(() => {
+        fetchShops();
     }, []);
 
-    // Save to localStorage whenever shops change
-    useEffect(() => {
-        if (isLoaded) {
-            localStorage.setItem('laris_shops', JSON.stringify(shops));
+    const addShop = async () => {
+        const newShopData = { url: '', ck: '', cs: '' };
+        try {
+            const res = await fetch('/api/shops', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newShopData)
+            });
+            const data = await res.json();
+            if (data.success) {
+                setShops([data.shop, ...shops]);
+            }
+        } catch (e) {
+            console.error("Failed to add shop", e);
         }
-    }, [shops, isLoaded]);
-
-    const addShop = () => {
-        const newShop: Shop = {
-            id: Date.now().toString(),
-            url: '',
-            ck: '',
-            cs: ''
-        };
-        setShops([...shops, newShop]);
     };
 
-    const removeShop = (id: string) => {
-        setShops(shops.filter(s => s.id !== id));
+    const removeShop = async (id: string) => {
+        if (!confirm("Naozaj chcete odstrániť tento e-shop?")) return;
+        try {
+            const res = await fetch(`/api/shops?id=${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                setShops(shops.filter(s => s.id !== id));
+            }
+        } catch (e) {
+            console.error("Failed to remove shop", e);
+        }
     };
 
-    const updateShop = (id: string, field: keyof Shop, value: string) => {
+    const saveShop = async (id: string) => {
+        setIsSaving(id);
+        const shop = shops.find(s => s.id === id);
+        if (!shop) return;
+
+        try {
+            const res = await fetch('/api/shops', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(shop)
+            });
+            const data = await res.json();
+            if (data.success) {
+                // Success
+            }
+        } catch (e) {
+            console.error("Failed to save shop", e);
+            alert("Chyba pri ukladaní.");
+        } finally {
+            setIsSaving(null);
+        }
+    };
+
+    const testConnection = async (id: string) => {
+        setConnectionStatus(prev => ({ ...prev, [id]: 'testing' }));
+        try {
+            const res = await fetch('/api/woo/orders');
+            const data = await res.json();
+            if (data.success) {
+                setConnectionStatus(prev => ({ ...prev, [id]: 'success' }));
+                setTimeout(() => setConnectionStatus(prev => ({ ...prev, [id]: 'idle' })), 3000);
+            } else {
+                setConnectionStatus(prev => ({ ...prev, [id]: 'error' }));
+            }
+        } catch (e) {
+            setConnectionStatus(prev => ({ ...prev, [id]: 'error' }));
+        }
+    };
+
+    const updateShopLocal = (id: string, field: keyof Shop, value: string) => {
         setShops(shops.map(s => s.id === id ? { ...s, [field]: value } : s));
     };
 
@@ -75,6 +127,10 @@ export default function SettingsPage() {
         { id: 'agent', label: 'Local Agent', icon: Terminal },
         { id: 'db', label: 'Databáza', icon: Database },
     ];
+
+    if (!isLoaded) {
+        return <div className="p-12 text-center text-slate-400 font-bold">Načítavam nastavenia...</div>;
+    }
 
     return (
         <div>
@@ -161,7 +217,7 @@ export default function SettingsPage() {
                                     <input
                                         type="text"
                                         value={shop.url}
-                                        onChange={(e) => updateShop(shop.id, 'url', e.target.value)}
+                                        onChange={(e) => updateShopLocal(shop.id, 'url', e.target.value)}
                                         placeholder="https://vasha-stranka.sk"
                                         className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                     />
@@ -171,18 +227,54 @@ export default function SettingsPage() {
                                     <input
                                         type="password"
                                         value={shop.ck}
-                                        onChange={(e) => updateShop(shop.id, 'ck', e.target.value)}
+                                        onChange={(e) => updateShopLocal(shop.id, 'ck', e.target.value)}
                                         className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                     />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Consumer Secret</label>
-                                    <input
-                                        type="password"
-                                        value={shop.cs}
-                                        onChange={(e) => updateShop(shop.id, 'cs', e.target.value)}
-                                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                    />
+                                    <div className="flex gap-4">
+                                        <input
+                                            type="password"
+                                            value={shop.cs}
+                                            onChange={(e) => updateShopLocal(shop.id, 'cs', e.target.value)}
+                                            className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => testConnection(shop.id)}
+                                                disabled={connectionStatus[shop.id] === 'testing'}
+                                                className={`px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${connectionStatus[shop.id] === 'success'
+                                                        ? 'bg-green-500 text-white'
+                                                        : connectionStatus[shop.id] === 'error'
+                                                            ? 'bg-red-500 text-white'
+                                                            : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                                                    }`}
+                                                title="Testovať spojenie"
+                                            >
+                                                {connectionStatus[shop.id] === 'testing' ? <Activity size={14} className="animate-spin" /> :
+                                                    connectionStatus[shop.id] === 'success' ? <Check size={14} /> :
+                                                        <Globe size={14} />}
+                                                <span className="hidden md:inline">{
+                                                    connectionStatus[shop.id] === 'testing' ? 'Testujem...' :
+                                                        connectionStatus[shop.id] === 'success' ? 'OK' :
+                                                            connectionStatus[shop.id] === 'error' ? 'Chyba' :
+                                                                'Test'
+                                                }</span>
+                                            </button>
+                                            <button
+                                                onClick={() => saveShop(shop.id)}
+                                                disabled={isSaving === shop.id}
+                                                className={`px-6 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${isSaving === shop.id
+                                                        ? 'bg-slate-100 text-slate-400'
+                                                        : 'bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200'
+                                                    }`}
+                                            >
+                                                <Save size={14} className={isSaving === shop.id ? 'animate-pulse' : ''} />
+                                                <span>{isSaving === shop.id ? 'Ukladám...' : 'Uložiť'}</span>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -233,11 +325,6 @@ export default function SettingsPage() {
                                 defaultValue={5000}
                                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                             />
-                        </div>
-                        <div className="flex items-end">
-                            <button className="w-full py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20">
-                                Uložiť Konfiguráciu
-                            </button>
                         </div>
                     </div>
                 </div>
