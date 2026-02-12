@@ -39,6 +39,12 @@ export async function GET(request: Request) {
 
         const orders = await response.json();
 
+        // Validation: WooCommerce might return an error object instead of an array
+        if (!Array.isArray(orders)) {
+            console.error("WooCommerce error response:", orders);
+            throw new Error(orders.message || orders.code || "WooCommerce returned an unexpected response format (not an array)");
+        }
+
         // Transform WooCommerce orders
         const transformedOrders = orders.map((order: any) => ({
             id: order.id,
