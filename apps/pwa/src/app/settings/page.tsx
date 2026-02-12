@@ -112,9 +112,9 @@ export default function SettingsPage() {
     const testConnection = async (id: string) => {
         setConnectionStatus(prev => ({ ...prev, [id]: 'testing' }));
         try {
-            const res = await fetch('/api/woo/orders');
+            const res = await fetch(`/api/woo/orders?shopId=${id}`);
             const data = await res.json();
-            if (data.success) {
+            if (data.success && !data.message) { // data.message indicates incomplete config in our new logic
                 setConnectionStatus(prev => ({ ...prev, [id]: 'success' }));
                 setTimeout(() => setConnectionStatus(prev => ({ ...prev, [id]: 'idle' })), 3000);
             } else {
