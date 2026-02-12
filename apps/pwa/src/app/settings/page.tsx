@@ -59,9 +59,12 @@ export default function SettingsPage() {
             const data = await res.json();
             if (data.success) {
                 setShops([data.shop, ...shops]);
+            } else {
+                alert("Chyba pri pridávaní e-shopu: " + (data.error || "Neznáma chyba"));
             }
         } catch (e) {
             console.error("Failed to add shop", e);
+            alert("Nepodarilo sa pripojiť k serveru.");
         }
     };
 
@@ -72,9 +75,12 @@ export default function SettingsPage() {
             const data = await res.json();
             if (data.success) {
                 setShops(shops.filter(s => s.id !== id));
+            } else {
+                alert("Chyba pri odstraňovaní.");
             }
         } catch (e) {
             console.error("Failed to remove shop", e);
+            alert("Nepodarilo sa odstrániť e-shop.");
         }
     };
 
@@ -91,7 +97,9 @@ export default function SettingsPage() {
             });
             const data = await res.json();
             if (data.success) {
-                // Success
+                // Success - maybe show a small toast or just settle
+            } else {
+                alert("Chyba pri ukladaní: " + (data.error || "Neznáma chyba"));
             }
         } catch (e) {
             console.error("Failed to save shop", e);
@@ -245,10 +253,10 @@ export default function SettingsPage() {
                                                 onClick={() => testConnection(shop.id)}
                                                 disabled={connectionStatus[shop.id] === 'testing'}
                                                 className={`px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${connectionStatus[shop.id] === 'success'
-                                                        ? 'bg-green-500 text-white'
-                                                        : connectionStatus[shop.id] === 'error'
-                                                            ? 'bg-red-500 text-white'
-                                                            : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                                                    ? 'bg-green-500 text-white'
+                                                    : connectionStatus[shop.id] === 'error'
+                                                        ? 'bg-red-500 text-white'
+                                                        : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
                                                     }`}
                                                 title="Testovať spojenie"
                                             >
@@ -266,8 +274,8 @@ export default function SettingsPage() {
                                                 onClick={() => saveShop(shop.id)}
                                                 disabled={isSaving === shop.id}
                                                 className={`px-6 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${isSaving === shop.id
-                                                        ? 'bg-slate-100 text-slate-400'
-                                                        : 'bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200'
+                                                    ? 'bg-slate-100 text-slate-400'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200'
                                                     }`}
                                             >
                                                 <Save size={14} className={isSaving === shop.id ? 'animate-pulse' : ''} />
