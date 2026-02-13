@@ -165,7 +165,23 @@ export default function Dashboard() {
                     <td className="px-6 py-4">
                       <div className="max-w-[200px]">
                         <p className="text-xs font-bold text-slate-900 truncate">{order.items?.[0]?.name || 'Neznáma položka'}</p>
-                        {order.items?.length > 1 && <p className="text-[10px] text-slate-400 font-medium">+ ďalších {order.items.length - 1} položiek</p>}
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {order.items?.[0]?.templateKey && (
+                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-black uppercase border border-blue-100">
+                              {order.items[0].templateKey}
+                            </span>
+                          )}
+                          {order.items?.[0]?.material && (
+                            <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-bold uppercase">
+                              {order.items[0].material}
+                            </span>
+                          )}
+                          {order.items?.[0]?.hasInvitation && (
+                            <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded text-[9px] font-bold uppercase border border-purple-100">
+                              + Pozvánka
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">

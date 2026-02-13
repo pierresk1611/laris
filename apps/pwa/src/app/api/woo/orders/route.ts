@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { processOrders } from '@/lib/order-processor';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,22 +82,7 @@ export async function GET(request: Request) {
             throw new Error(orders.message || orders.code || "WooCommerce returned an unexpected response format (not an array)");
         }
 
-        // Transform WooCommerce orders
-        const transformedOrders = orders.map((order: any) => ({
-            id: order.id,
-            number: order.number,
-            status: order.status,
-            customer: `${order.billing.first_name} ${order.billing.last_name}`,
-            total: order.total,
-            currency: order.currency,
-            date: order.date_created,
-            items: order.line_items.map((item: any) => ({
-                id: item.id,
-                name: item.name,
-                price: item.price,
-                quantity: item.quantity
-            }))
-        }));
+        const transformedOrders = await processOrders(orders);
 
         return NextResponse.json({ success: true, orders: transformedOrders });
     } catch (error: any) {
