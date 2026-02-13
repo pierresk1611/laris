@@ -4,45 +4,50 @@ import { getSetting } from '@/lib/settings';
 import { Dropbox } from 'dropbox';
 
 export async function POST() {
-    console.log("[DropboxSync] Starting template synchronization...");
+    console.log("[DropboxSync] STARTing template synchronization...");
     try {
         // 1. Fetch credentials
+        console.log("[DropboxSync] Checkpoint 1: Fetching settings...");
         const refreshToken = await getSetting('DROPBOX_REFRESH_TOKEN');
         const clientId = await getSetting('DROPBOX_APP_KEY');
         const clientSecret = await getSetting('DROPBOX_APP_SECRET');
         const accessToken = await getSetting('DROPBOX_ACCESS_TOKEN');
         const customPath = await getSetting('DROPBOX_FOLDER_PATH');
+
         const folderPath = customPath ? (customPath.startsWith('/') ? customPath : `/${customPath}`) : '/TEMPLATES';
+        console.log("[DropboxSync] Checkpoint 1.b: Settings loaded.", { folderPath, hasAccess: !!accessToken, hasRefresh: !!refreshToken });
 
         let dbx;
 
         if (refreshToken && clientId && clientSecret) {
-            console.log("[DropboxSync] Using Refresh Token flow.");
+            console.log("[DropboxSync] Checkpoint 2: Initializing Refresh Token flow.");
             dbx = new Dropbox({
                 clientId,
                 clientSecret,
                 refreshToken
             });
         } else if (accessToken) {
-            console.log("[DropboxSync] Using temporary Access Token fallback.");
+            console.log("[DropboxSync] Checkpoint 2: Initializing Access Token fallback.");
             dbx = new Dropbox({ accessToken });
         } else {
-            console.error("[DropboxSync] Missing required credentials.");
+            console.error("[DropboxSync] Checkpoint 2: Missing required credentials.");
             return NextResponse.json({
                 success: false,
                 error: 'CREDENTIALS_MISSING',
-                message: 'Chýbajú prihlasovacie údaje pre Dropbox. Vložte buď "Dočasný kód" (Testovať) alebo kompletné údaje pre Refresh Token v Nastaveniach.'
+                message: 'Chýbajú prihlasovacie údaje pre Dropbox (Access Token alebo Refresh Token).'
             }, { status: 400 });
         }
 
-        // 3. Fetch file list from the specified path
-        console.log(`[DropboxSync] Listing folders in ${folderPath}...`);
+        // 3. Fetch file list
+        console.log(`[DropboxSync] Checkpoint 3: Listing folders in ${folderPath}...`);
         const response = await dbx.filesListFolder({ path: folderPath });
+        console.log("[DropboxSync] Checkpoint 3.b: API response received.");
 
         const dropboxFolders = response.result.entries.filter(e => e['.tag'] === 'folder');
-        console.log(`[DropboxSync] Found ${dropboxFolders.length} folders in Dropbox at ${folderPath}.`);
+        console.log(`[DropboxSync] Checkpoint 3.c: Found ${dropboxFolders.length} folders.`);
 
         // 4. Upsert into database
+        console.log("[DropboxSync] Checkpoint 4: Starting DB upserts...");
         let count = 0;
         for (const folder of dropboxFolders) {
             // @ts-ignore
@@ -57,8 +62,10 @@ export async function POST() {
             });
             count++;
         }
+        console.log(`[DropboxSync] Checkpoint 4.b: ${count} upserts done.`);
 
         // 5. Store sync timestamp
+        console.log("[DropboxSync] Checkpoint 5: Updating last sync meta...");
         // @ts-ignore
         await prisma.setting.upsert({
             where: { id: 'LAST_DROPBOX_SYNC' },
@@ -72,6 +79,7 @@ export async function POST() {
             update: { value: 'OK', category: 'SYSTEM' },
             create: { id: 'LAST_DROPBOX_SYNC_STATUS', value: 'OK', category: 'SYSTEM' }
         });
+        console.log("[DropboxSync] END: Synchronization successful.");
 
         return NextResponse.json({
             success: true,
