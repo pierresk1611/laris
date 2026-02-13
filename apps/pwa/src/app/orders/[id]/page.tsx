@@ -175,7 +175,34 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                             <Type size={16} className="text-blue-500" />
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Smart Editor</span>
                         </div>
-                        <button className="text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:underline">
+                        <button
+                            onClick={() => {
+                                if (!aiData.body) return;
+                                // Simple heuristic: "Name, Location, Date" (User specific format)
+                                const parts = aiData.body.split(',').map(s => s.trim());
+
+                                if (parts.length >= 2) {
+                                    setAiData(prev => ({
+                                        ...prev,
+                                        names: parts[0],
+                                        location: parts[1],
+                                        date: parts.slice(2).join(', ') // Rest is date
+                                    }));
+                                } else {
+                                    // Fallback: split by newlines
+                                    const lines = aiData.body.split('\n').map(s => s.trim()).filter(Boolean);
+                                    if (lines.length >= 2) {
+                                        setAiData(prev => ({
+                                            ...prev,
+                                            names: lines[0],
+                                            location: lines[1],
+                                            date: lines.slice(2).join(', ')
+                                        }));
+                                    }
+                                }
+                            }}
+                            className="text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:underline"
+                        >
                             Pre-parsovať znova
                         </button>
                     </div>
