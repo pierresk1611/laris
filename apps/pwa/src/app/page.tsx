@@ -199,7 +199,6 @@ export default function Dashboard() {
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest w-16">Náhľad</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID / Zdroj</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Zákazník</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Ks</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Položka</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Akcia</th>
@@ -222,11 +221,6 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-slate-600 font-medium">{order.customer}</td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="px-2 py-1 bg-slate-100 rounded text-xs font-bold text-slate-700">
-                        {order.items?.reduce((acc: number, item: any) => acc + item.quantity, 0) || 0}
-                      </span>
-                    </td>
                     <td className="px-6 py-4">
                       <div className="max-w-[200px]">
                         <p className="text-xs font-bold text-slate-900 truncate">{order.items?.[0]?.name || 'Neznáma položka'}</p>
