@@ -26,11 +26,15 @@ export async function POST() {
             dbx = new Dropbox({
                 clientId,
                 clientSecret,
-                refreshToken
+                refreshToken,
+                fetch
             });
         } else if (accessToken) {
             console.log("[DropboxSync] Checkpoint 2: Initializing Access Token fallback.");
-            dbx = new Dropbox({ accessToken });
+            dbx = new Dropbox({
+                accessToken,
+                fetch
+            });
         } else {
             console.error("[DropboxSync] Checkpoint 2: Missing required credentials.");
             return NextResponse.json({
