@@ -44,13 +44,21 @@ export async function POST() {
             }, { status: 400 });
         }
 
-        // 3. Fetch file list
+        // 3. Fetch ALL files with pagination
         console.log(`[DropboxSync] Checkpoint 3: Listing folders in ${folderPath}...`);
-        const response = await dbx.filesListFolder({ path: folderPath });
-        console.log("[DropboxSync] Checkpoint 3.b: API response received.");
+        let response = await dbx.filesListFolder({ path: folderPath });
+        let entries = [...response.result.entries];
 
-        const dropboxFolders = response.result.entries.filter(e => e['.tag'] === 'folder');
-        console.log(`[DropboxSync] Checkpoint 3.c: Found ${dropboxFolders.length} folders.`);
+        while (response.result.has_more) {
+            console.log("[DropboxSync] Fetching next page of entries...");
+            response = await dbx.filesListFolderContinue({ cursor: response.result.cursor });
+            entries.push(...response.result.entries);
+        }
+
+        console.log("[DropboxSync] Checkpoint 3.b: All API responses received.");
+
+        const dropboxFolders = entries.filter(e => e['.tag'] === 'folder');
+        console.log(`[DropboxSync] Checkpoint 3.c: Found total ${dropboxFolders.length} folders.`);
 
         // 4. Upsert into database
         console.log("[DropboxSync] Checkpoint 4: Starting DB upserts...");
@@ -90,7 +98,7 @@ export async function POST() {
         return NextResponse.json({
             success: true,
             count,
-            message: `Úspešne synchronizovaných ${count} šablón.`
+            message: `Úspešne synchronizovaných ${count} šablón z adresára "${folderPath}".`
         });
 
     } catch (error: any) {
