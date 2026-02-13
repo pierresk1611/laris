@@ -75,10 +75,11 @@ export default function SettingsPage() {
                 alert("E-shop úspešne uložený");
                 fetchSettings();
             } else {
-                alert("Chyba: " + result.error);
+                alert("Chyba: " + (result.error || "Neznáma chyba servera"));
             }
-        } catch (e) {
-            alert("Chyba pri ukladaní");
+        } catch (e: any) {
+            console.error("Shop save error:", e);
+            alert("Chyba pri ukladaní: " + e.message);
         } finally {
             setSaving(null);
         }
@@ -95,15 +96,22 @@ export default function SettingsPage() {
                     data: { id, value, category, isSecret }
                 })
             });
+
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`Server returned ${res.status}: ${text.substring(0, 100)}`);
+            }
+
             const result = await res.json();
             if (result.success) {
                 alert("Nastavenie uložené");
                 fetchSettings();
             } else {
-                alert("Chyba: " + result.error);
+                alert("Chyba: " + (result.error || "Neznáma chyba servera"));
             }
-        } catch (e) {
-            alert("Chyba pri ukladaní");
+        } catch (e: any) {
+            console.error("Setting save error:", e);
+            alert("Chyba pri ukladaní nastavania: " + e.message);
         } finally {
             setSaving(null);
         }
