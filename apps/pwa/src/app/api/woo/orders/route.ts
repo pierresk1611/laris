@@ -7,11 +7,12 @@ export async function GET(request: Request) {
     const API_VERSION = "v1.0.2-defensive";
     console.log(`[WooCommerce API ${API_VERSION}] Incoming request`);
 
+    let shop;
+    let apiUrl: string | undefined;
+
     try {
         const { searchParams } = new URL(request.url);
         const shopId = searchParams.get('shopId');
-
-        let shop;
         if (shopId) {
             shop = await prisma.shop.findUnique({ where: { id: shopId } });
         } else {
@@ -63,7 +64,7 @@ export async function GET(request: Request) {
 
         // 3. Construct URL
         const baseUrl = rawUrl.replace(/\/$/, "");
-        const apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${rawCk}&consumer_secret=${rawCs}&per_page=10`;
+        apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${rawCk}&consumer_secret=${rawCs}&per_page=10`;
 
         console.log('WooCommerce API: Fetching from:', apiUrl.replace(rawCk, '***').replace(rawCs, '***'));
 
