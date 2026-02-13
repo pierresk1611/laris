@@ -1,4 +1,4 @@
-import { prisma } from './prisma';
+import { prisma } from '@/lib/prisma';
 import { extractTemplateKey, parseEPO, needsInvitation } from './parser';
 
 export interface ProcessedItem {
@@ -31,7 +31,13 @@ export interface ProcessedOrder {
  */
 export async function processOrders(rawOrders: any[], shopSource: string, shopName: string): Promise<ProcessedOrder[]> {
     try {
+        if (!Array.isArray(rawOrders)) {
+            console.error("processOrders: rawOrders is not an array:", rawOrders);
+            return [];
+        }
+
         // 1. Pre-fetch all active templates to avoid N+1 queries
+        // Use a safe wrapper to prevent database issues from killing the whole page
         const templates = await prisma.template.findMany({
             where: { status: 'ACTIVE' }
         }).catch((err: any) => {
@@ -44,6 +50,8 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
 
         return rawOrders.map(order => {
             try {
+                if (!order) throw new Error("Order object is null or undefined");
+
                 const items = (order.line_items || []).map((item: any) => {
                     const templateKey = extractTemplateKey(item.name || "");
                     const templateId = templateKey ? templateMap.get(templateKey) || null : null;
@@ -79,7 +87,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
 
                 return {
                     id: order.id,
-                    number: order.number?.toString() || order.id?.toString(),
+                    number: order.number?.toString() || order.id?.toString() || "N/A",
                     status: order.status || 'unknown',
                     customer: order.billing
                         ? `${order.billing.first_name || ''} ${order.billing.last_name || ''}`.trim() || "Bez mena"
@@ -94,10 +102,10 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
             } catch (err: any) {
                 console.error("Single order processing error:", err, order);
                 return {
-                    id: order.id || 0,
+                    id: order?.id || 0,
                     number: "ERROR",
                     status: "error",
-                    customer: `ERROR: ${err.message}`, // Diagnostic
+                    customer: `CHYBA: ${err.message}`, // Diagnostic visible in UI
                     total: "0",
                     currency: "EUR",
                     date: new Date().toISOString(),
@@ -109,6 +117,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
         });
     } catch (globalErr: any) {
         console.error("Global processOrders error:", globalErr);
-        throw new Error(`Order Processing Failed: ${globalErr.message}`);
+        // We still want to return an empty array if everything fails globally
+        return [];
     }
 }
