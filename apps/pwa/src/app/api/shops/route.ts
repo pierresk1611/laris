@@ -16,7 +16,17 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
-        const { url, ck, cs } = await request.json();
+        const body = await request.json();
+
+        if (!body || body.url === undefined || body.ck === undefined || body.cs === undefined) {
+            return NextResponse.json({
+                success: false,
+                error: 'Missing required fields',
+                details: 'URL, Consumer Key, and Consumer Secret must be provided (can be empty strings).'
+            }, { status: 400 });
+        }
+
+        const { url, ck, cs } = body;
 
         const shop = await prisma.shop.create({
             data: { url, ck, cs }
@@ -24,7 +34,13 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ success: true, shop });
     } catch (error: any) {
-        return NextResponse.json({ success: false, error: 'Failed to add shop', details: error.message }, { status: 400 });
+        console.error("Shop creation error:", error);
+        return NextResponse.json({
+            success: false,
+            error: 'Failed to add shop',
+            details: error.message,
+            prisma_error_code: error.code
+        }, { status: 400 });
     }
 }
 
