@@ -4,15 +4,13 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-    const API_VERSION = "v1.0.2-defensive";
-    console.log(`[WooCommerce API ${API_VERSION}] Incoming request`);
-
     let shop;
     let apiUrl: string | undefined;
 
     try {
         const { searchParams } = new URL(request.url);
         const shopId = searchParams.get('shopId');
+
         if (shopId) {
             shop = await prisma.shop.findUnique({ where: { id: shopId } });
         } else {
@@ -23,8 +21,7 @@ export async function GET(request: Request) {
             return NextResponse.json({
                 success: false,
                 orders: [],
-                error: "Shop not found in database",
-                api_version: API_VERSION
+                error: "Shop not found in database"
             }, { status: 404 });
         }
 
@@ -46,8 +43,7 @@ export async function GET(request: Request) {
                 success: false,
                 orders: [],
                 error: "Validation Error",
-                details: `Shop configuration incomplete or URL invalid. Detected: "${rawUrl}" (Must start with http:// or https://)`,
-                api_version: API_VERSION
+                details: `Shop configuration incomplete or URL invalid. Detected: "${rawUrl}" (Must start with http:// or https://)`
             }, { status: 400 });
         }
 
@@ -57,8 +53,7 @@ export async function GET(request: Request) {
                 success: false,
                 orders: [],
                 error: "Validation Error",
-                details: "Shop configuration incomplete (Consumer Key or Secret missing in database).",
-                api_version: API_VERSION
+                details: "Shop configuration incomplete (Consumer Key or Secret missing in database)."
             }, { status: 400 });
         }
 
@@ -108,7 +103,7 @@ export async function GET(request: Request) {
         console.error("WooCommerce fetch error:", error);
 
         // Construct a masked URL for the error response
-        const maskedUrl = (typeof apiUrl !== 'undefined')
+        const maskedUrl = (typeof apiUrl !== 'undefined' && apiUrl)
             ? apiUrl.replace(/consumer_key=[^&]+/, 'consumer_key=***').replace(/consumer_secret=[^&]+/, 'consumer_secret=***')
             : 'URL not constructed';
 
@@ -123,8 +118,7 @@ export async function GET(request: Request) {
             error: "Failed to fetch orders from WooCommerce",
             details: errorHint,
             error_stack: error.stack?.split('\n')[0],
-            masked_url: maskedUrl,
-            api_version: API_VERSION
+            masked_url: maskedUrl
         }, { status: 500 });
     }
 }
