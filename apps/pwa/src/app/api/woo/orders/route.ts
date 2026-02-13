@@ -19,18 +19,34 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: true, orders: [] });
         }
 
+        // Debug logging for Vercel logs
+        console.log('WooCommerce API attempt for shop:', {
+            id: shop.id,
+            url: shop.url,
+            has_ck: !!shop.ck,
+            has_cs: !!shop.cs
+        });
+
         // Validation: If shop is empty or missing credentials
-        if (!shop.url || !shop.ck || !shop.cs) {
+        if (!shop.url || shop.url.trim() === "" || shop.url === "/" || !shop.url.startsWith("http")) {
             return NextResponse.json({
                 success: true,
                 orders: [],
-                message: "Shop configuration incomplete (URL or Keys missing)"
+                message: "Shop configuration incomplete or URL invalid (must start with http:// or https://)"
+            });
+        }
+
+        if (!shop.ck || !shop.cs) {
+            return NextResponse.json({
+                success: true,
+                orders: [],
+                message: "Shop configuration incomplete (Keys missing)"
             });
         }
 
         // Remove trailing slash if present
-        const baseUrl = shop.url.replace(/\/$/, "");
-        const apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${shop.ck}&consumer_secret=${shop.cs}&per_page=10`;
+        const baseUrl = shop.url.trim().replace(/\/$/, "");
+        const apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${shop.ck.trim()}&consumer_secret=${shop.cs.trim()}&per_page=10`;
 
         const response = await fetch(apiUrl);
         if (!response.ok) {
