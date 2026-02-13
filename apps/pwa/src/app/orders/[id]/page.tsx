@@ -112,11 +112,31 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
 
                             {order.items?.map((item: any) => (
                                 <div key={item.id} className="mb-4 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-                                    <p className="font-bold text-slate-900 mb-1">• {item.name} ({item.quantity}ks)</p>
+                                    <p className="font-bold text-slate-900 mb-1">• {item.name}</p>
 
                                     {/* Display all raw options (EPO) */}
                                     {item.options && Object.entries(item.options).length > 0 ? (
                                         <div className="bg-slate-50 rounded border border-slate-100 mt-2 overflow-hidden">
+                                            {/* Download Buttons for Uploads */}
+                                            {item.downloads && item.downloads.length > 0 && (
+                                                <div className="p-2 bg-blue-50 border-b border-blue-100 flex flex-col gap-1">
+                                                    {item.downloads.map((dl: any, idx: number) => (
+                                                        <a
+                                                            key={idx}
+                                                            href={dl.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex items-center justify-between gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold hover:bg-blue-700 transition-colors shadow-sm"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <Play size={12} className="rotate-90" />
+                                                                <span>STIAHNUŤ: {dl.label}</span>
+                                                            </div>
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            )}
+
                                             {Object.entries(item.options)
                                                 .map(([key, val]) => (
                                                     <div key={key} className="group flex flex-col border-b border-slate-100 last:border-0 p-2 hover:bg-slate-100 transition-colors">
@@ -179,34 +199,42 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Smart Editor</span>
                         </div>
                         <button
-                            onClick={() => {
-                                if (!aiData.body) return;
-                                // Simple heuristic: "Name, Location, Date" (User specific format)
-                                const parts = aiData.body.split(',').map(s => s.trim());
+                            onClick={async (e) => {
+                                const btn = e.currentTarget;
+                                const originalText = btn.innerText;
+                                btn.innerText = "⏳ AI PARSUJE...";
+                                btn.disabled = true;
 
-                                if (parts.length >= 2) {
-                                    setAiData(prev => ({
-                                        ...prev,
-                                        names: parts[0],
-                                        location: parts[1],
-                                        date: parts.slice(2).join(', '), // Rest is date
-                                        body: "" // Clear body to avoid duplication
-                                    }));
-                                } else {
-                                    // Fallback: split by newlines
-                                    const lines = aiData.body.split('\n').map(s => s.trim()).filter(Boolean);
-                                    if (lines.length >= 2) {
+                                try {
+                                    const res = await fetch('/api/ai/parse', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            text: aiData.body,
+                                            options: order.items?.[0]?.options
+                                        })
+                                    });
+                                    const result = await res.json();
+                                    if (result.success && result.data) {
                                         setAiData(prev => ({
                                             ...prev,
-                                            names: lines[0],
-                                            location: lines[1],
-                                            date: lines.slice(2).join(', '),
-                                            body: "" // Clear body here too
+                                            names: result.data.names || "",
+                                            location: result.data.location || "",
+                                            date: result.data.date || "",
+                                            body: "" // Clear body to avoid duplication
                                         }));
+                                    } else {
+                                        alert("AI Chyba: " + (result.error || "Nepodarilo sa parsovať"));
                                     }
+                                } catch (err) {
+                                    console.error("AI Parse error:", err);
+                                    alert("Chyba pripojenia k AI");
+                                } finally {
+                                    btn.innerText = originalText;
+                                    btn.disabled = false;
                                 }
                             }}
-                            className="text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:underline"
+                            className="text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:underline disabled:opacity-50"
                         >
                             Pre-parsovať znova
                         </button>

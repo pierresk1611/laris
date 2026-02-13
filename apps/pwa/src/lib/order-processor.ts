@@ -10,8 +10,9 @@ export interface ProcessedItem {
     templateId: string | null;
     hasInvitation: boolean;
     material: string | null;
-    options: Record<string, string>;
+    options: Record<string, any>;
     rawMetaData: any[];
+    downloads?: { label: string; url: string; name: string }[];
 }
 
 export interface ProcessedOrder {
@@ -70,7 +71,8 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         hasInvitation: needsInvitation(item.name || "", metaData),
                         material: epo.material || null,
                         options: epo,
-                        rawMetaData: metaData || []
+                        rawMetaData: metaData || [],
+                        downloads: (epo as any).downloads || []
                     };
                 }).filter((i: any) => i !== null);
 

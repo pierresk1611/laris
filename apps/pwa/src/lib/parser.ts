@@ -52,16 +52,34 @@ export function parseEPO(metaData: any[]) {
             const epoData = meta.value;
             if (Array.isArray(epoData)) {
                 epoData.forEach((item: any) => {
-                    // EPO items usually have 'name' and 'value'
-                    if (item.name && item.value) {
-                        addToResult(item.name, item.value);
+                    // Extract Label: Value pairs
+                    // section_label is often the group name, name is the field name
+                    const label = item.section_label || item.name || "";
+                    const value = item.value;
+
+                    if (label && value) {
+                        addToResult(label, value);
+                    }
+
+                    // Extract quantity if present in EPO item (optional field in some versions)
+                    if (item.quantity && !isNaN(parseInt(item.quantity))) {
+                        result.epoQuantity = String(item.quantity);
+                    }
+
+                    // Special Handling for Uploads
+                    if (item.element?.type === "upload" && item.file?.url) {
+                        if (!result.downloads) (result as any).downloads = [];
+                        (result as any).downloads.push({
+                            label: label || "Súbor",
+                            url: item.file.url,
+                            name: item.file.name || "Súbor"
+                        });
                     }
                 });
             }
         }
 
         // 2. Handle Standard/Visible Meta (skip hidden ones except EPO)
-        // Meta from Woo API usually has 'display_key' and 'display_value' for UI
         else if (!key.startsWith('_')) {
             const label = meta.display_key || meta.key || meta.label;
             const value = meta.display_value || meta.value;
