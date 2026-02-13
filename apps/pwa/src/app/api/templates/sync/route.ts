@@ -11,6 +11,8 @@ export async function POST() {
         const clientId = await getSetting('DROPBOX_APP_KEY');
         const clientSecret = await getSetting('DROPBOX_APP_SECRET');
         const accessToken = await getSetting('DROPBOX_ACCESS_TOKEN');
+        const customPath = await getSetting('DROPBOX_FOLDER_PATH');
+        const folderPath = customPath ? (customPath.startsWith('/') ? customPath : `/${customPath}`) : '/TEMPLATES';
 
         let dbx;
 
@@ -33,12 +35,12 @@ export async function POST() {
             }, { status: 400 });
         }
 
-        // 3. Fetch file list from /TEMPLATES
-        console.log("[DropboxSync] Listing folders in /TEMPLATES...");
-        const response = await dbx.filesListFolder({ path: '/TEMPLATES' });
+        // 3. Fetch file list from the specified path
+        console.log(`[DropboxSync] Listing folders in ${folderPath}...`);
+        const response = await dbx.filesListFolder({ path: folderPath });
 
         const dropboxFolders = response.result.entries.filter(e => e['.tag'] === 'folder');
-        console.log(`[DropboxSync] Found ${dropboxFolders.length} folders in Dropbox.`);
+        console.log(`[DropboxSync] Found ${dropboxFolders.length} folders in Dropbox at ${folderPath}.`);
 
         // 4. Upsert into database
         let count = 0;

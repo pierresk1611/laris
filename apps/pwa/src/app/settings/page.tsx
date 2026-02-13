@@ -346,6 +346,31 @@ export default function SettingsPage() {
                         </h3>
                         <div className="space-y-6">
                             <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Dropbox Priečinok (Path)</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={getSettingValue('DROPBOX_FOLDER_PATH')}
+                                        onChange={(e) => {
+                                            const newSettings = [...settings];
+                                            const idx = newSettings.findIndex(s => s.id === 'DROPBOX_FOLDER_PATH');
+                                            if (idx !== -1) newSettings[idx].value = e.target.value;
+                                            else newSettings.push({ id: 'DROPBOX_FOLDER_PATH', value: e.target.value, category: 'STORAGE', isSecret: false });
+                                            setSettings(newSettings);
+                                        }}
+                                        placeholder="/TEMPLATES"
+                                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                                    />
+                                    <button
+                                        onClick={() => handleSaveSetting('DROPBOX_FOLDER_PATH', getSettingValue('DROPBOX_FOLDER_PATH'), 'STORAGE', false)}
+                                        disabled={saving === 'DROPBOX_FOLDER_PATH'}
+                                        className="px-6 bg-slate-900 text-white rounded-xl font-bold text-xs"
+                                    >
+                                        Uložiť
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
                                 <label className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-2 block">Dočasný Access Token (Testovací)</label>
                                 <div className="flex gap-2">
                                     <input
