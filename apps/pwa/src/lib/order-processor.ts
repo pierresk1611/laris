@@ -62,6 +62,20 @@ export async function processOrders(rawOrders: any[], shopSource: string): Promi
                     };
                 });
 
+                // Robust Shop Name / Hostname extraction
+                const cleanSource = (() => {
+                    const s = (shopSource || "").toLowerCase().trim();
+                    if (!s || s === "url" || s.includes("woocommerce") || s.includes("localhost")) {
+                        return "Môj E-shop";
+                    }
+                    try {
+                        const url = new URL(shopSource.startsWith('http') ? shopSource : `https://${shopSource}`);
+                        return url.hostname.replace('www.', '');
+                    } catch (e) {
+                        return shopSource;
+                    }
+                })();
+
                 return {
                     id: order.id,
                     number: order.number?.toString() || order.id?.toString(),
@@ -72,19 +86,11 @@ export async function processOrders(rawOrders: any[], shopSource: string): Promi
                     total: order.total || "0",
                     currency: order.currency || "EUR",
                     date: order.date_created || new Date().toISOString(),
-                    shopSource: (() => {
-                        try {
-                            const url = new URL(shopSource);
-                            return url.hostname.replace('www.', '');
-                        } catch (e) {
-                            return shopSource;
-                        }
-                    })(),
+                    shopSource: cleanSource,
                     items
                 };
             } catch (err: any) {
                 console.error("Single order processing error:", err, order);
-                // Return a "Skeleton" order instead of crashing everything
                 return {
                     id: order.id || 0,
                     number: "ERROR",
@@ -93,14 +99,7 @@ export async function processOrders(rawOrders: any[], shopSource: string): Promi
                     total: "0",
                     currency: "EUR",
                     date: new Date().toISOString(),
-                    shopSource: (() => {
-                        try {
-                            const url = new URL(shopSource);
-                            return url.hostname.replace('www.', '');
-                        } catch (e) {
-                            return shopSource;
-                        }
-                    })(),
+                    shopSource: "Môj E-shop",
                     items: []
                 };
             }
