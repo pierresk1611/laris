@@ -44,9 +44,12 @@ export async function POST() {
             }, { status: 400 });
         }
 
-        // 3. Fetch ALL files with pagination
-        console.log(`[DropboxSync] Checkpoint 3: Listing folders in ${folderPath}...`);
-        let response = await dbx.filesListFolder({ path: folderPath });
+        // 3. Fetch ALL files with pagination + RECURSION
+        console.log(`[DropboxSync] Checkpoint 3: Listing folders recursively in ${folderPath}...`);
+        let response = await dbx.filesListFolder({
+            path: folderPath,
+            recursive: true
+        });
         let entries = [...response.result.entries];
 
         while (response.result.has_more) {
@@ -58,7 +61,10 @@ export async function POST() {
         console.log("[DropboxSync] Checkpoint 3.b: All API responses received.");
 
         const dropboxFolders = entries.filter(e => e['.tag'] === 'folder');
-        console.log(`[DropboxSync] Checkpoint 3.c: Found total ${dropboxFolders.length} folders.`);
+        const folderNamesFull = dropboxFolders.map(f => f.name);
+        const sampleNames = folderNamesFull.slice(0, 10).join(', ');
+
+        console.log(`[DropboxSync] Checkpoint 3.c: Found total ${dropboxFolders.length} folders. Sample: ${sampleNames}`);
 
         // 4. Upsert into database
         console.log("[DropboxSync] Checkpoint 4: Starting DB upserts...");
@@ -98,7 +104,7 @@ export async function POST() {
         return NextResponse.json({
             success: true,
             count,
-            message: `Úspešne synchronizovaných ${count} šablón z adresára "${folderPath}".`
+            message: `Nájdených ${count} šablón v "${folderPath}". Ukážka: ${sampleNames}${folderNamesFull.length > 10 ? '...' : ''}`
         });
 
     } catch (error: any) {
