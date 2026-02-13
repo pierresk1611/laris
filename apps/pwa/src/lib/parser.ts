@@ -33,32 +33,50 @@ export function needsInvitation(productName: string, metaData: any[]): boolean {
 export function parseEPO(metaData: any[]) {
     const result: Record<string, string> = {};
 
-    if (Array.isArray(metaData)) {
-        // 1. Try to find structured EPO data first
-        const epoMeta = metaData.find(m => m.key === '_tmcartepo_data');
-        let dataToScan = metaData;
+    if (!Array.isArray(metaData)) return result;
 
-        if (epoMeta && Array.isArray(epoMeta.value)) {
-            dataToScan = epoMeta.value;
+    // Helper to add to result without overwriting unless necessary
+    const addToResult = (key: string, val: any) => {
+        const cleanKey = String(key || "").trim();
+        const cleanVal = String(val || "").trim();
+        if (cleanKey && cleanVal) {
+            result[cleanKey] = cleanVal;
+        }
+    };
+
+    metaData.forEach(meta => {
+        const key = meta.key || "";
+
+        // 1. Handle EPO Data (Extra Product Options)
+        if (key === '_tmcartepo_data') {
+            const epoData = meta.value;
+            if (Array.isArray(epoData)) {
+                epoData.forEach((item: any) => {
+                    // EPO items usually have 'name' and 'value'
+                    if (item.name && item.value) {
+                        addToResult(item.name, item.value);
+                    }
+                });
+            }
         }
 
-        // 2. Scan available data (either flat meta or deep EPO)
-        dataToScan.forEach(meta => {
-            // EPO uses 'name' and 'value', standard meta uses 'label'/'key' and 'value'
-            const label = String(meta?.name || meta?.label || meta?.display_key || "").trim();
-            const value = String(meta?.value || "").trim();
+        // 2. Handle Standard/Visible Meta (skip hidden ones except EPO)
+        // Meta from Woo API usually has 'display_key' and 'display_value' for UI
+        else if (!key.startsWith('_')) {
+            const label = meta.display_key || meta.key || meta.label;
+            const value = meta.display_value || meta.value;
+            addToResult(label, value);
+        }
+    });
 
-            if (!label) return;
-
-            // Store raw value with label key for display
-            result[label] = value;
-
-            // Map known keys for easier access in code
-            if (label.includes("Materiál") || label.includes("Papier")) result.material = value;
-            if (label.includes("Farba")) result.color = value;
-            if (label.includes("Typ metalickej")) result.metalType = value;
-        });
-    }
+    // 3. Map for internal logic (backward compatibility)
+    // We scan the *result* keys now to find material/color
+    Object.entries(result).forEach(([label, value]) => {
+        const l = label.toLowerCase();
+        if (l.includes("materiál") || l.includes("papier")) result.material = value;
+        if (l.includes("farba")) result.color = value;
+        if (l.includes("typ metalickej")) result.metalType = value;
+    });
 
     return result;
 }
