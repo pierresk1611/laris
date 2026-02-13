@@ -110,7 +110,7 @@ export default function SettingsPage() {
             const res = await fetch('/api/settings/test-woo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: shop.url, ck: shop.ck, cs: shop.cs })
+                body: JSON.stringify({ url: shop.url, ck: shop.ck, cs: shop.cs, shopId: shop.id })
             });
             const result = await res.json();
             if (result.success) {
