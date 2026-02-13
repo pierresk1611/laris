@@ -29,44 +29,70 @@ export interface ProcessedOrder {
  * Enriches raw WooCommerce orders with template information and metadata.
  */
 export async function processOrders(rawOrders: any[], shopSource: string): Promise<ProcessedOrder[]> {
-    // 1. Pre-fetch all active templates to avoid N+1 queries
-    const templates = await prisma.template.findMany({
-        where: { status: 'ACTIVE' }
-    });
-
-    // Create a map for fast lookup
-    const templateMap = new Map(templates.map((t: { key: string; id: string }) => [t.key.toUpperCase(), t.id]));
-
-    return rawOrders.map(order => {
-        const items = order.line_items.map((item: any) => {
-            const templateKey = extractTemplateKey(item.name);
-            const templateId = templateKey ? templateMap.get(templateKey) || null : null;
-            const metaData = item.meta_data || [];
-            const epo = parseEPO(metaData);
-
-            return {
-                id: item.id,
-                name: item.name,
-                price: item.price,
-                quantity: item.quantity,
-                templateKey,
-                templateId,
-                hasInvitation: needsInvitation(item.name, metaData),
-                material: epo.material || null,
-                options: epo
-            };
+    try {
+        // 1. Pre-fetch all active templates to avoid N+1 queries
+        const templates = await prisma.template.findMany({
+            where: { status: 'ACTIVE' }
+        }).catch((err: any) => {
+            console.error("Prisma Templates fetch error:", err);
+            return []; // Fail gracefully with no templates
         });
 
-        return {
-            id: order.id,
-            number: order.number,
-            status: order.status,
-            customer: `${order.billing.first_name} ${order.billing.last_name}`,
-            total: order.total,
-            currency: order.currency,
-            date: order.date_created,
-            shopSource,
-            items
-        };
-    });
+        // Create a map for fast lookup
+        const templateMap = new Map(templates.map((t: any) => [t.key?.toUpperCase() || "UNKNOWN", t.id]));
+
+        return rawOrders.map(order => {
+            try {
+                const items = (order.line_items || []).map((item: any) => {
+                    const templateKey = extractTemplateKey(item.name || "");
+                    const templateId = templateKey ? templateMap.get(templateKey) || null : null;
+                    const metaData = item.meta_data || [];
+                    const epo = parseEPO(metaData);
+
+                    return {
+                        id: item.id || 0,
+                        name: item.name || "Neznáma položka",
+                        price: item.price || "0",
+                        quantity: item.quantity || 1,
+                        templateKey,
+                        templateId,
+                        hasInvitation: needsInvitation(item.name || "", metaData),
+                        material: epo.material || null,
+                        options: epo
+                    };
+                });
+
+                return {
+                    id: order.id,
+                    number: order.number?.toString() || order.id?.toString(),
+                    status: order.status || 'unknown',
+                    customer: order.billing
+                        ? `${order.billing.first_name || ''} ${order.billing.last_name || ''}`.trim() || "Bez mena"
+                        : "Bez mena",
+                    total: order.total || "0",
+                    currency: order.currency || "EUR",
+                    date: order.date_created || new Date().toISOString(),
+                    shopSource,
+                    items
+                };
+            } catch (err: any) {
+                console.error("Single order processing error:", err, order);
+                // Return a "Skeleton" order instead of crashing everything
+                return {
+                    id: order.id || 0,
+                    number: "ERROR",
+                    status: "error",
+                    customer: "Chyba spracovania",
+                    total: "0",
+                    currency: "EUR",
+                    date: new Date().toISOString(),
+                    shopSource,
+                    items: []
+                };
+            }
+        });
+    } catch (globalErr: any) {
+        console.error("Global processOrders error:", globalErr);
+        throw new Error(`Order Processing Failed: ${globalErr.message}`);
+    }
 }

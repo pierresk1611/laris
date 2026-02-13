@@ -65,6 +65,7 @@ export default function Dashboard() {
           setOrders(data.orders);
         } else {
           setError(data.error);
+          (window as any)._lastErrorDetails = data.details || data.error_stack || "No additional details";
         }
       } catch (e) {
         setError("Nepodarilo sa pripojiť k e-shopu.");
@@ -120,7 +121,13 @@ export default function Dashboard() {
           <div className="p-12 text-center text-red-400">
             <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
             <p className="font-bold">Chyba pripojenia</p>
-            <p className="text-sm">{error}</p>
+            <p className="text-sm font-medium text-red-500/80 mb-2">{error}</p>
+            {/* Show extra details if we have them */}
+            {(window as any)._lastErrorDetails && (
+              <p className="text-[10px] text-red-400 opacity-70 max-w-md mx-auto bg-red-50 p-2 rounded-lg border border-red-100">
+                {(window as any)._lastErrorDetails}
+              </p>
+            )}
             <Link href="/settings" className="mt-4 inline-block text-xs font-bold text-blue-600 uppercase underline">Skontrolovať API kľúče</Link>
           </div>
         ) : orders.length === 0 ? (
