@@ -49,12 +49,17 @@ export default function SettingsPage() {
             if (data.success) {
                 setShops(data.shops || []);
                 setSettings(data.settings || []);
+                setStats({ patternCount: data.patternCount });
             }
         } catch (e) {
             console.error("Failed to fetch settings", e);
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleExportDataset = () => {
+        window.location.href = '/api/settings/export-patterns';
     };
 
     const handleSaveShop = async (shop: Shop) => {
@@ -476,10 +481,13 @@ export default function SettingsPage() {
                         </h3>
                         <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 mb-6">
                             <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Počet záznamov v ai_learning</p>
-                            <p className="text-3xl font-black text-slate-900">247</p>
+                            <p className="text-3xl font-black text-slate-900">{stats?.patternCount || 0}</p>
                             <p className="text-[11px] text-slate-500 mt-2">Toľko opráv sa AI už naučila a používa ich pri parsovaní nových objednávok.</p>
                         </div>
-                        <button className="w-full py-4 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                        <button
+                            onClick={handleExportDataset}
+                            className="w-full py-4 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                        >
                             Exportovať učiaci dataset (.json)
                         </button>
                     </div>

@@ -8,8 +8,11 @@ import { encrypt, decrypt } from "@/lib/crypto";
  */
 export async function GET() {
     try {
-        const settings = await prisma.setting.findMany();
-        const shops = await prisma.shop.findMany();
+        const [settings, shops, patternCount] = await Promise.all([
+            prisma.setting.findMany(),
+            prisma.shop.findMany(),
+            prisma.aiPattern.count()
+        ]);
 
         // Mask secret values for the frontend
         const maskedSettings = settings.map(s => ({
@@ -26,7 +29,8 @@ export async function GET() {
         return NextResponse.json({
             success: true,
             settings: maskedSettings,
-            shops: maskedShops
+            shops: maskedShops,
+            patternCount
         });
     } catch (e: any) {
         return NextResponse.json({ success: false, error: e.message }, { status: 500 });
