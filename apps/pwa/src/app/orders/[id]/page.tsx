@@ -186,7 +186,8 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                         ...prev,
                                         names: parts[0],
                                         location: parts[1],
-                                        date: parts.slice(2).join(', ') // Rest is date
+                                        date: parts.slice(2).join(', '), // Rest is date
+                                        body: "" // Clear body to avoid duplication
                                     }));
                                 } else {
                                     // Fallback: split by newlines
@@ -196,7 +197,8 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                             ...prev,
                                             names: lines[0],
                                             location: lines[1],
-                                            date: lines.slice(2).join(', ')
+                                            date: lines.slice(2).join(', '),
+                                            body: "" // Clear body here too
                                         }));
                                     }
                                 }
