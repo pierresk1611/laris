@@ -34,11 +34,21 @@ export function parseEPO(metaData: any[]) {
     const result: Record<string, string> = {};
 
     if (Array.isArray(metaData)) {
-        metaData.forEach(meta => {
-            const label = String(meta?.label || "");
-            const value = String(meta?.value || "");
+        // 1. Try to find structured EPO data first
+        const epoMeta = metaData.find(m => m.key === '_tmcartepo_data');
+        let dataToScan = metaData;
 
-            if (label.includes("Materiál")) result.material = value;
+        if (epoMeta && Array.isArray(epoMeta.value)) {
+            dataToScan = epoMeta.value;
+        }
+
+        // 2. Scan available data (either flat meta or deep EPO)
+        dataToScan.forEach(meta => {
+            // EPO uses 'name' and 'value', standard meta uses 'label'/'key' and 'value'
+            const label = String(meta?.name || meta?.label || meta?.display_key || "").trim();
+            const value = String(meta?.value || "").trim();
+
+            if (label.includes("Materiál") || label.includes("Papier")) result.material = value;
             if (label.includes("Farba")) result.color = value;
             if (label.includes("Typ metalickej")) result.metalType = value;
         });
