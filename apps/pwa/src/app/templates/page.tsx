@@ -9,10 +9,16 @@ import {
     Plus,
     MoreHorizontal,
     FolderOpen,
-    FileText
+    FileText,
+    RefreshCw,
+    Clock,
+    CheckCircle2,
+    XCircle,
+    Loader2
 } from "lucide-react";
 import Papa from "papaparse";
 import { extractTemplateKey } from "@/lib/parser";
+import { toast } from "sonner";
 
 interface Template {
     key: string;
@@ -23,34 +29,66 @@ interface Template {
     matchCount?: number;
 }
 
-const initialTemplates: Template[] = [
-    { key: "JSO 15", name: "Jubilejná Svadobná 15", mappedPaths: 12, status: "ACTIVE", matched: false },
-    { key: "VSO 02", name: "Vianočná Súprava 02", mappedPaths: 8, status: "ACTIVE", matched: false },
-    { key: "JSO 22", name: "Jubilejná Svadobná 22", mappedPaths: 0, status: "MISSING_MANIFEST", matched: false },
-];
-
 export default function TemplatesPage() {
-    const [templates, setTemplates] = useState<Template[]>(initialTemplates);
+    const [templates, setTemplates] = useState<Template[]>([]);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [lastSync, setLastSync] = useState<{ date: string; status: string } | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const fetchData = async () => {
+        try {
+            const [templatesRes, settingsRes] = await Promise.all([
+                fetch('/api/templates'),
+                fetch('/api/settings')
+            ]);
+
+            const templatesData = await templatesRes.json();
+            const settingsData = await settingsRes.json();
+
+            if (templatesData.success) {
+                setTemplates(templatesData.templates);
+            }
+
+            // Extract last sync info from settings
+            const syncDate = settingsData.settings?.find((s: any) => s.id === 'LAST_DROPBOX_SYNC')?.value;
+            const syncStatus = settingsData.settings?.find((s: any) => s.id === 'LAST_DROPBOX_SYNC_STATUS')?.value;
+
+            if (syncDate) {
+                setLastSync({ date: syncDate, status: syncStatus || 'OK' });
+            }
+        } catch (error) {
+            console.error('Fetch error:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     const handleDropboxSync = async () => {
         setIsSyncing(true);
-        try {
-            // In a real scenario, this would call our /api/dropbox route
-            const response = await fetch('/api/dropbox');
-            const data = await response.json();
-            console.log('Dropbox sync response:', data);
+        const promise = fetch('/api/templates/sync', { method: 'POST' });
 
-            // For now, we simulate finding "new" templates if they weren't in initial list
-            // or just refreshing the status
-            setTimeout(() => {
+        toast.promise(promise, {
+            loading: 'Pripájam sa k Dropboxu a hľadám šablóny...',
+            success: async (res) => {
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    fetchData();
+                    setIsSyncing(false);
+                    return data.message || `Úspešne synchronizovaných ${data.count} šablón.`;
+                } else {
+                    throw new Error(data.message || 'Chyba pri synchronizácii');
+                }
+            },
+            error: (err) => {
                 setIsSyncing(false);
-            }, 1500);
-        } catch (error) {
-            console.error('Dropbox sync failed:', error);
-            setIsSyncing(false);
-        }
+                return err.message || 'Nepodarilo sa spojiť s Dropboxom.';
+            }
+        });
     };
 
     const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,7 +103,6 @@ export default function TemplatesPage() {
                 const foundKeys: Record<string, number> = {};
 
                 rows.forEach(row => {
-                    // Search all columns for pattern JSO XX / VSO XX
                     Object.values(row).forEach(val => {
                         if (typeof val === 'string') {
                             const key = extractTemplateKey(val);
@@ -83,6 +120,7 @@ export default function TemplatesPage() {
                 })).sort((a: Template, b: Template) => (b.matchCount || 0) - (a.matchCount || 0));
 
                 setTemplates(updatedTemplates);
+                toast.success('Párovanie z CSV dokončené.');
             }
         });
     };
@@ -90,6 +128,33 @@ export default function TemplatesPage() {
     return (
         <div>
             <AppHeader title="Šablóny" />
+
+            {/* Sync Status Bar */}
+            <div className="flex items-center gap-6 mb-8 px-6 py-3 bg-white border border-slate-100 rounded-2xl shadow-sm text-[11px] font-bold uppercase tracking-wider">
+                <div className="flex items-center gap-2 text-slate-400">
+                    <Clock size={14} />
+                    <span>Posledná synchronizácia:</span>
+                    <span className="text-slate-900">
+                        {lastSync ? new Date(lastSync.date).toLocaleString('sk-SK') : 'Nikdy'}
+                    </span>
+                </div>
+                <div className="h-4 w-[1px] bg-slate-100" />
+                <div className="flex items-center gap-2">
+                    {lastSync?.status === 'OK' ? (
+                        <>
+                            <CheckCircle2 size={14} className="text-green-500" />
+                            <span className="text-green-600">Stav: OK</span>
+                        </>
+                    ) : lastSync ? (
+                        <>
+                            <XCircle size={14} className="text-red-500" />
+                            <span className="text-red-600">Stav: Chyba ({lastSync.status.replace('ERROR: ', '')})</span>
+                        </>
+                    ) : (
+                        <span className="text-slate-400">Stav: Žiadne dáta</span>
+                    )}
+                </div>
+            </div>
 
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div className="relative w-full md:w-96">
@@ -122,49 +187,65 @@ export default function TemplatesPage() {
                         disabled={isSyncing}
                         className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-sm font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 ${isSyncing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                        <Plus size={18} />
+                        {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
                         <span>{isSyncing ? 'Synchronizujem...' : 'Import z Dropboxu'}</span>
                     </button>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {templates.map((template: Template) => (
-                    <Link href={`/templates/${encodeURIComponent(template.key)}`} key={template.key}>
-                        <div className={`cursor-pointer bg-white rounded-3xl border transition-all group p-6 relative overflow-hidden h-full ${template.matched ? 'border-blue-200 shadow-blue-100 ring-1 ring-blue-100' : 'border-slate-100 shadow-sm hover:shadow-md'}`}>
-                            {template.matched && (
-                                <div className="absolute top-0 right-0 px-3 py-1 bg-blue-500 text-white text-[8px] font-black uppercase tracking-tighter rounded-bl-xl shadow-sm">
-                                    {template.matchCount} ks v CSV
-                                </div>
-                            )}
-
-                            <div className="flex justify-between items-start mb-4">
-                                <div className={`p-3 rounded-2xl transition-colors ${template.matched ? 'bg-blue-50' : 'bg-slate-50 group-hover:bg-blue-50'}`}>
-                                    <Layers className={`${template.matched ? 'text-blue-500' : 'text-slate-400 group-hover:text-blue-500'}`} size={24} />
-                                </div>
-                                <button className="p-2 text-slate-400 hover:text-slate-600">
-                                    <MoreHorizontal size={20} />
-                                </button>
-                            </div>
-
-                            <h3 className="text-lg font-black text-slate-900 mb-1">{template.key}</h3>
-                            <p className="text-sm font-medium text-slate-500 mb-6">{template.name}</p>
-
-                            <div className="flex items-center justify-between pt-6 border-t border-slate-50 mt-auto">
-                                <div className="flex items-center gap-2">
-                                    <FolderOpen size={14} className="text-slate-400" />
-                                    <span className="text-xs font-bold text-slate-600">{template.mappedPaths} polí namapovaných</span>
-                                </div>
-                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${template.status === 'ACTIVE'
-                                    ? 'bg-green-100 text-green-600'
-                                    : 'bg-red-100 text-red-600'
-                                    }`}>
-                                    {template.status === 'ACTIVE' ? 'Aktívna' : 'Bez manifestu'}
-                                </span>
-                            </div>
+                {isLoading ? (
+                    Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="bg-white rounded-3xl border border-slate-100 p-6 h-48 animate-pulse">
+                            <div className="w-12 h-12 bg-slate-50 rounded-2xl mb-4" />
+                            <div className="w-24 h-6 bg-slate-50 rounded-lg mb-2" />
+                            <div className="w-48 h-4 bg-slate-50 rounded-md" />
                         </div>
-                    </Link>
-                ))}
+                    ))
+                ) : templates.length === 0 ? (
+                    <div className="col-span-full py-20 text-center">
+                        <Layers size={48} className="mx-auto text-slate-200 mb-4" />
+                        <h3 className="text-lg font-bold text-slate-400">Žiadne šablóny nenájdené</h3>
+                        <p className="text-sm text-slate-400">Skúste synchronizovať s Dropboxom</p>
+                    </div>
+                ) : (
+                    templates.map((template: Template) => (
+                        <Link href={`/templates/${encodeURIComponent(template.key)}`} key={template.key}>
+                            <div className={`cursor-pointer bg-white rounded-3xl border transition-all group p-6 relative overflow-hidden h-full ${template.matched ? 'border-blue-200 shadow-blue-100 ring-1 ring-blue-100' : 'border-slate-100 shadow-sm hover:shadow-md'}`}>
+                                {template.matched && (
+                                    <div className="absolute top-0 right-0 px-3 py-1 bg-blue-500 text-white text-[8px] font-black uppercase tracking-tighter rounded-bl-xl shadow-sm">
+                                        {template.matchCount} ks v CSV
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className={`p-3 rounded-2xl transition-colors ${template.matched ? 'bg-blue-50' : 'bg-slate-50 group-hover:bg-blue-50'}`}>
+                                        <Layers className={`${template.matched ? 'text-blue-500' : 'text-slate-400 group-hover:text-blue-500'}`} size={24} />
+                                    </div>
+                                    <button className="p-2 text-slate-400 hover:text-slate-600">
+                                        <MoreHorizontal size={20} />
+                                    </button>
+                                </div>
+
+                                <h3 className="text-lg font-black text-slate-900 mb-1">{template.key}</h3>
+                                <p className="text-sm font-medium text-slate-500 mb-6">{template.name}</p>
+
+                                <div className="flex items-center justify-between pt-6 border-t border-slate-50 mt-auto">
+                                    <div className="flex items-center gap-2">
+                                        <FolderOpen size={14} className="text-slate-400" />
+                                        <span className="text-xs font-bold text-slate-600">{template.mappedPaths} polí namapovaných</span>
+                                    </div>
+                                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${template.status === 'ACTIVE'
+                                        ? 'bg-green-100 text-green-600'
+                                        : 'bg-red-100 text-red-600'
+                                        }`}>
+                                        {template.status === 'ACTIVE' ? 'Aktívna' : 'Bez manifestu'}
+                                    </span>
+                                </div>
+                            </div>
+                        </Link>
+                    ))
+                )}
             </div>
         </div>
     );

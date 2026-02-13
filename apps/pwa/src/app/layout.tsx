@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import { Toaster } from 'sonner';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,9 +28,9 @@ export default function RootLayout({
     <html lang="sk">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen`}>
         <div className="bg-halo" />
+        <Toaster position="top-right" richColors />
         <Sidebar />
         <main className="ml-[280px] min-h-screen p-8">
-          {/* Top Status Bar placeholder in Page content or here? Let's keep layout clean and put it in pages or a separate header component */}
           {children}
         </main>
       </body>

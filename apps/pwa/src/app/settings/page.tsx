@@ -342,31 +342,89 @@ export default function SettingsPage() {
                     <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
                         <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
                             <Database size={24} className="text-blue-400" />
-                            Úložisko
+                            Dropbox Úložisko
                         </h3>
-                        <div>
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Dropbox Access Token</label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="password"
-                                    value={getSettingValue('DROPBOX_ACCESS_TOKEN')}
-                                    onChange={(e) => {
-                                        const newSettings = [...settings];
-                                        const idx = newSettings.findIndex(s => s.id === 'DROPBOX_ACCESS_TOKEN');
-                                        if (idx !== -1) newSettings[idx].value = e.target.value;
-                                        else newSettings.push({ id: 'DROPBOX_ACCESS_TOKEN', value: e.target.value, category: 'STORAGE', isSecret: true });
-                                        setSettings(newSettings);
-                                    }}
-                                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-                                />
-                                <button
-                                    onClick={() => handleSaveSetting('DROPBOX_ACCESS_TOKEN', getSettingValue('DROPBOX_ACCESS_TOKEN'), 'STORAGE', true)}
-                                    disabled={saving === 'DROPBOX_ACCESS_TOKEN'}
-                                    className="px-6 bg-slate-900 text-white rounded-xl font-bold text-xs"
-                                >
-                                    Uložiť
-                                </button>
+                        <div className="space-y-6">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Dropbox Refresh Token</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="password"
+                                        value={getSettingValue('DROPBOX_REFRESH_TOKEN')}
+                                        onChange={(e) => {
+                                            const newSettings = [...settings];
+                                            const idx = newSettings.findIndex(s => s.id === 'DROPBOX_REFRESH_TOKEN');
+                                            if (idx !== -1) newSettings[idx].value = e.target.value;
+                                            else newSettings.push({ id: 'DROPBOX_REFRESH_TOKEN', value: e.target.value, category: 'STORAGE', isSecret: true });
+                                            setSettings(newSettings);
+                                        }}
+                                        placeholder="Trvalý prístupový kód..."
+                                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                                    />
+                                    <button
+                                        onClick={() => handleSaveSetting('DROPBOX_REFRESH_TOKEN', getSettingValue('DROPBOX_REFRESH_TOKEN'), 'STORAGE', true)}
+                                        disabled={saving === 'DROPBOX_REFRESH_TOKEN'}
+                                        className="px-6 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition-colors"
+                                    >
+                                        Uložiť
+                                    </button>
+                                </div>
                             </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Dropbox App Key</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="password"
+                                            value={getSettingValue('DROPBOX_APP_KEY')}
+                                            onChange={(e) => {
+                                                const newSettings = [...settings];
+                                                const idx = newSettings.findIndex(s => s.id === 'DROPBOX_APP_KEY');
+                                                if (idx !== -1) newSettings[idx].value = e.target.value;
+                                                else newSettings.push({ id: 'DROPBOX_APP_KEY', value: e.target.value, category: 'STORAGE', isSecret: true });
+                                                setSettings(newSettings);
+                                            }}
+                                            className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                                        />
+                                        <button
+                                            onClick={() => handleSaveSetting('DROPBOX_APP_KEY', getSettingValue('DROPBOX_APP_KEY'), 'STORAGE', true)}
+                                            disabled={saving === 'DROPBOX_APP_KEY'}
+                                            className="p-3 bg-slate-50 text-slate-900 border border-slate-200 rounded-xl font-bold text-xs"
+                                        >
+                                            <Save size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Dropbox App Secret</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="password"
+                                            value={getSettingValue('DROPBOX_APP_SECRET')}
+                                            onChange={(e) => {
+                                                const newSettings = [...settings];
+                                                const idx = newSettings.findIndex(s => s.id === 'DROPBOX_APP_SECRET');
+                                                if (idx !== -1) newSettings[idx].value = e.target.value;
+                                                else newSettings.push({ id: 'DROPBOX_APP_SECRET', value: e.target.value, category: 'STORAGE', isSecret: true });
+                                                setSettings(newSettings);
+                                            }}
+                                            className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                                        />
+                                        <button
+                                            onClick={() => handleSaveSetting('DROPBOX_APP_SECRET', getSettingValue('DROPBOX_APP_SECRET'), 'STORAGE', true)}
+                                            disabled={saving === 'DROPBOX_APP_SECRET'}
+                                            className="p-3 bg-slate-50 text-slate-900 border border-slate-200 rounded-xl font-bold text-xs"
+                                        >
+                                            <Save size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p className="text-[10px] text-slate-400 italic">
+                                * Priečinok na Dropboxe musí byť: <b>/TEMPLATES</b>. Používajte Refresh Token pre trvalú funkčnosť.
+                            </p>
                         </div>
                     </div>
                 </div>
