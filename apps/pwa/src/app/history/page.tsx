@@ -109,9 +109,9 @@ export default function HistoryPage() {
                                         {/* ID / Source */}
                                         <td className="px-6 py-4">
                                             <div>
-                                                <span className="text-lg font-black text-slate-900 block">#{order.id}</span>
+                                                <span className="text-lg font-black text-slate-900 block">#{order.number}</span>
                                                 <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest truncate max-w-[120px] block">
-                                                    POZVÁNKA NA OSLAVU
+                                                    {order.shopName || 'E-shop'}
                                                 </span>
                                             </div>
                                         </td>
@@ -119,7 +119,7 @@ export default function HistoryPage() {
                                         {/* Customer */}
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
-                                                <span className="font-bold text-slate-700">{order.billing?.first_name} {order.billing?.last_name || "Bez mena"}</span>
+                                                <span className="font-bold text-slate-700">{order.customer || "Bez mena"}</span>
                                             </div>
                                         </td>
 
@@ -127,11 +127,20 @@ export default function HistoryPage() {
                                         <td className="px-6 py-4 max-w-[300px]">
                                             <div className="flex flex-col">
                                                 <span className="text-xs font-bold text-slate-900 truncate block">
-                                                    {order.line_items?.[0]?.name || "Neznáma položka"}
+                                                    {order.items?.[0]?.name || "Neznáma položka"}
                                                 </span>
-                                                <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded w-fit mt-1">
-                                                    {order.line_items?.[0]?.template_key || "No Template"}
-                                                </span>
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {order.items?.[0]?.templateKey && (
+                                                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-black uppercase border border-blue-100">
+                                                            {order.items[0].templateKey}
+                                                        </span>
+                                                    )}
+                                                    {order.items?.[0]?.material && (
+                                                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-bold uppercase">
+                                                            {order.items[0].material}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
 
