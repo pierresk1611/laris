@@ -34,12 +34,19 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                 const data = await res.json();
                 if (data.success) {
                     setOrder(data.order);
-                    // Pre-fill editor if needed, or wait for AI
+                    const item = data.order.items?.[0];
+                    const options = item?.options || {};
+
+                    // Smart pre-fill from EPO data
+                    // 1. Find the main text block (usually "Text pozvánky" or similar)
+                    const textKey = Object.keys(options).find(k => /text|pozvánka|oznámenie|citát/i.test(k));
+                    const bodyText = textKey ? options[textKey] : (item?.name || "");
+
                     setAiData({
-                        names: data.order.customer || "",
-                        date: new Date(data.order.date).toLocaleDateString('sk-SK'),
+                        names: "", // Clear to avoid wrong customer name guessing
+                        date: "",  // Clear to avoid wrong order date
                         location: "",
-                        body: data.order.items?.[0]?.name || ""
+                        body: bodyText // Fill with the raw text for AI to parse
                     });
                 } else {
                     setError(data.error);
