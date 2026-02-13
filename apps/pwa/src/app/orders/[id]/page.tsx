@@ -129,6 +129,32 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                     ) : (
                                         <p className="text-xs text-slate-400 italic mt-1">Žiadne extra dáta</p>
                                     )}
+
+                                    {/* Raw Metadata Dump (Collapsible) */}
+                                    <details className="mt-2 group">
+                                        <summary className="text-[9px] font-bold text-slate-300 cursor-pointer hover:text-blue-500 uppercase tracking-widest list-none flex items-center gap-1">
+                                            <span className="group-open:rotate-90 transition-transform">▶</span>
+                                            DEBUG: SUROVÉ DÁTA (RAW)
+                                        </summary>
+                                        <div className="bg-slate-900 rounded p-2 mt-1 overflow-x-auto text-left">
+                                            {item.rawMetaData?.map((meta: any, idx: number) => (
+                                                <div key={idx} className="border-b border-slate-700/50 pb-2 mb-2 last:border-0 last:pb-0 font-mono">
+                                                    <div className="text-[10px] text-yellow-500 font-bold break-all">
+                                                        {meta.key}
+                                                    </div>
+                                                    <div className="text-[9px] text-slate-300 whitespace-pre-wrap break-words mt-0.5">
+                                                        {typeof meta.value === 'object' || Array.isArray(meta.value)
+                                                            ? JSON.stringify(meta.value, null, 2)
+                                                            : String(meta.value)
+                                                        }
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div className="text-[9px] text-slate-500 italic mt-2 text-center">
+                                                Koniec výpisu
+                                            </div>
+                                        </div>
+                                    </details>
                                 </div>
                             ))}
                         </div>
