@@ -72,7 +72,14 @@ export async function processOrders(rawOrders: any[], shopSource: string): Promi
                     total: order.total || "0",
                     currency: order.currency || "EUR",
                     date: order.date_created || new Date().toISOString(),
-                    shopSource,
+                    shopSource: (() => {
+                        try {
+                            const url = new URL(shopSource);
+                            return url.hostname.replace('www.', '');
+                        } catch (e) {
+                            return shopSource;
+                        }
+                    })(),
                     items
                 };
             } catch (err: any) {
@@ -86,7 +93,14 @@ export async function processOrders(rawOrders: any[], shopSource: string): Promi
                     total: "0",
                     currency: "EUR",
                     date: new Date().toISOString(),
-                    shopSource,
+                    shopSource: (() => {
+                        try {
+                            const url = new URL(shopSource);
+                            return url.hostname.replace('www.', '');
+                        } catch (e) {
+                            return shopSource;
+                        }
+                    })(),
                     items: []
                 };
             }

@@ -13,15 +13,53 @@ import {
     ScanSearch
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function OrderDetail({ params }: { params: { id: string } }) {
+    const [order, setOrder] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [aiData, setAiData] = useState({
-        names: "Marek & Jana",
-        date: "25. Jún 2025",
-        location: "Kaštieľ Gbeľany",
-        body: "Srdečne Vás pozývame k svadobnému stolu..."
+        names: "",
+        date: "",
+        location: "",
+        body: ""
     });
+
+    useEffect(() => {
+        const fetchOrder = async () => {
+            try {
+                const res = await fetch(`/api/woo/orders/${params.id}`);
+                const data = await res.json();
+                if (data.success) {
+                    setOrder(data.order);
+                    // Pre-fill editor if needed, or wait for AI
+                    setAiData({
+                        names: data.order.customer || "",
+                        date: new Date(data.order.date).toLocaleDateString('sk-SK'),
+                        location: "",
+                        body: data.order.items?.[0]?.name || ""
+                    });
+                } else {
+                    setError(data.error);
+                }
+            } catch (e) {
+                setError("Nepodarilo sa načítať detaily objednávky.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchOrder();
+    }, [params.id]);
+
+    if (isLoading) return <div className="p-12 text-center text-slate-400 font-bold">Načítavam objednávku...</div>;
+    if (error || !order) return (
+        <div className="p-12 text-center text-red-500 font-bold">
+            <p>Chyba pri načítaní detailov.</p>
+            <p className="text-sm font-normal mt-2">{error}</p>
+            <Link href="/" className="mt-4 inline-block text-blue-600 underline">Späť na prehľad</Link>
+        </div>
+    );
 
     return (
         <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
@@ -31,8 +69,10 @@ export default function OrderDetail({ params }: { params: { id: string } }) {
                         <ChevronLeft size={24} className="text-slate-600" />
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-black text-slate-900">Objednávka {params.id}</h1>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Šablóna: JSO 15</p>
+                        <h1 className="text-2xl font-black text-slate-900">Objednávka #{order.number}</h1>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                            Šablóna: {order.items?.[0]?.templateKey || 'Nezistená'} • Zdroj: {order.shopSource}
+                        </p>
                     </div>
                 </div>
 
@@ -57,10 +97,19 @@ export default function OrderDetail({ params }: { params: { id: string } }) {
                     </div>
                     <div className="flex-1 p-6 overflow-y-auto">
                         <div className="prose prose-sm text-slate-600 leading-relaxed font-mono text-[13px] bg-white p-4 rounded-xl border border-slate-200">
-                            Marek a Jana, 25.06.2025, Kaštieľ Gbeľany. <br /><br />
-                            Text pozvánky: Srdečne Vás pozývame k svadobnému stolu... <br /><br />
-                            Typ papiera: Premium Linen <br />
-                            Počet ks: 50
+                            <strong>Zákazník:</strong> {order.customer} <br />
+                            <strong>E-mail:</strong> {order.billing?.email || 'Nezadaný'} <br /><br />
+
+                            <strong>Položky:</strong><br />
+                            {order.items?.map((item: any) => (
+                                <div key={item.id} className="mb-2">
+                                    • {item.name} ({item.quantity}ks) <br />
+                                    <span className="text-[11px] text-slate-400 ml-3">
+                                        Materiál: {item.material || 'Standard'} |
+                                        Šablóna: {item.templateKey || 'Nezistená'}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>

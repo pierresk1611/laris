@@ -62,7 +62,7 @@ export async function GET(request: Request) {
         const baseUrl = rawUrl.replace(/\/$/, "");
         apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${rawCk}&consumer_secret=${rawCs}&per_page=10`;
 
-        console.log('WooCommerce API: Fetching from:', apiUrl.replace(rawCk, '***').replace(rawCs, '***'));
+        console.log('E-shop API: Fetching from:', apiUrl.replace(rawCk, '***').replace(rawCs, '***'));
 
         const response = await fetch(apiUrl, {
             headers: {
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             success: false,
-            error: "Failed to fetch orders from WooCommerce",
+            error: "Failed to fetch orders from e-shop",
             details: errorHint,
             error_stack: error.stack?.split('\n')[0],
             masked_url: maskedUrl

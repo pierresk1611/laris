@@ -161,7 +161,7 @@ export default function Dashboard() {
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-900">#{order.number}</span>
                         <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter truncate w-24">
-                          {order.shopSource?.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] || 'Live Store'}
+                          {order.shopSource || 'E-shop Source'}
                         </span>
                       </div>
                     </td>
