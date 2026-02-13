@@ -60,7 +60,13 @@ export async function GET(request: Request) {
 
         // 3. Construct URL
         const baseUrl = rawUrl.replace(/\/$/, "");
-        apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${rawCk}&consumer_secret=${rawCs}&per_page=10`;
+        const limit = searchParams.get('limit') || '20';
+        const status = searchParams.get('status'); // Optional: e.g. 'completed,in-print'
+
+        let apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${rawCk}&consumer_secret=${rawCs}&per_page=${limit}`;
+        if (status) {
+            apiUrl += `&status=${status}`;
+        }
 
         console.log('E-shop API: Fetching from:', apiUrl.replace(rawCk, '***').replace(rawCs, '***'));
 
