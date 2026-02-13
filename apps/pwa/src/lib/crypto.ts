@@ -24,6 +24,10 @@ export function encrypt(text: string): string {
     return `${iv.toString('hex')}:${authTag}:${encrypted}`;
 }
 
+export function isFallbackSecret(): boolean {
+    return !process.env.ENCRYPTION_SECRET;
+}
+
 export function decrypt(hash: string): string {
     if (!hash || !hash.includes(':')) return hash;
 
@@ -40,8 +44,8 @@ export function decrypt(hash: string): string {
         decrypted += decipher.final('utf8');
 
         return decrypted;
-    } catch (e) {
-        console.error("Decryption failed:", e);
-        return "Decryption Error";
+    } catch (e: any) {
+        console.error("Decryption failed:", e.message);
+        return "DECRYPTION_ERROR:" + e.message;
     }
 }

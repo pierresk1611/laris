@@ -5,18 +5,33 @@ import Groq from "groq-sdk";
 import { getSetting } from "@/lib/settings";
 
 export async function POST(req: NextRequest) {
+    const correlationId = Math.random().toString(36).substring(7);
     try {
-        const groqApiKey = await getSetting('GROQ_API_KEY') || process.env.GROQ_API_KEY;
-        const keyPrefix = groqApiKey ? groqApiKey.substring(0, 5) : "NONE";
-        console.log(`AI Parse: retrieved API key (length: ${groqApiKey?.length || 0}, prefix: ${keyPrefix}...)`);
+        const dbKey = await getSetting('GROQ_API_KEY');
+        const envKey = process.env.GROQ_API_KEY;
 
-        if (!groqApiKey || groqApiKey === "Decryption Error") {
-            console.error("AI Parse: GROQ_API_KEY missing or decryption failed");
+        let groqApiKey = dbKey || envKey;
+        const source = dbKey ? "DATABASE" : (envKey ? "PROCESS_ENV" : "NONE");
+
+        console.log(`[AIParse:${correlationId}] Key source: ${source}`);
+
+        if (groqApiKey?.startsWith("DECRYPTION_ERROR:")) {
+            console.error(`[AIParse:${correlationId}] ${groqApiKey}`);
             return NextResponse.json({
                 success: false,
-                error: groqApiKey === "Decryption Error"
-                    ? "Chyba dešifrovania kľúča. Skontrolujte ENCRYPTION_SECRET."
-                    : "GROQ_API_KEY is not configured. Please add it to Settings."
+                error: "Chyba dešifrovania kľúča v databáze. Skontrolujte ENCRYPTION_SECRET.",
+                details: groqApiKey
+            }, { status: 500 });
+        }
+
+        const keyPrefix = groqApiKey ? groqApiKey.substring(0, 5) : "NONE";
+        console.log(`[AIParse:${correlationId}] Retrieved API key (length: ${groqApiKey?.length || 0}, prefix: ${keyPrefix}...)`);
+
+        if (!groqApiKey) {
+            console.error(`[AIParse:${correlationId}] GROQ_API_KEY missing from both DB and process.env`);
+            return NextResponse.json({
+                success: false,
+                error: "GROQ_API_KEY nie je nakonfigurovaný. Pridajte ho v Nastaveniach."
             }, { status: 500 });
         }
 
@@ -30,7 +45,6 @@ export async function POST(req: NextRequest) {
 
 
         // Format the input for AI
-        // If we have options (EPO), we use them. Otherwise we use the raw text.
         let inputContent = text || "";
         if (options && typeof options === 'object') {
             inputContent = Object.entries(options)
@@ -64,10 +78,10 @@ INSTRUCTIONS:
 1. Extract 'names' (names of the celebrated persons).
 2. Extract 'date' (date and time if available).
 3. Extract 'location' (where the event takes place).
-4. If dimension information (like 10x10 cm) is found, ignore it for fields but use it to ensure context.
-5. Return ONLY a valid JSON object with keys: "names", "date", "location". 
+4. Return ONLY a valid JSON object with keys: "names", "date", "location". 
 Do not include any prose or explanation.`;
 
+        console.log(`[AIParse:${correlationId}] Sending request to Groq SDK...`);
         const completion = await groq.chat.completions.create({
             messages: [{ role: "system", content: "You are a helpful assistant that outputs JSON." }, { role: "user", content: systemPrompt }],
             model: "llama-3.3-70b-versatile",
@@ -75,13 +89,13 @@ Do not include any prose or explanation.`;
         });
 
         const rawResult = completion.choices[0].message.content || "{}";
-        console.log("AI Parse: Result received from Groq");
+        console.log(`[AIParse:${correlationId}] Result received from Groq`);
         const parsedResult = JSON.parse(rawResult);
 
         return NextResponse.json({ success: true, data: parsedResult });
 
     } catch (e: any) {
-        console.error("Groq AI API Route Error:", e);
+        console.error(`[AIParse:${correlationId}] CRITICAL ERROR:`, e.stack || e.message);
         return NextResponse.json({
             success: false,
             error: `AI Error: ${e.message}`,

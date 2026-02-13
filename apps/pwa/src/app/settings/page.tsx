@@ -87,7 +87,9 @@ export default function SettingsPage() {
 
     const handleSaveSetting = async (id: string, value: string, category: string, isSecret: boolean) => {
         setSaving(id);
+        const correlationId = Math.random().toString(36).substring(7);
         try {
+            console.log(`[SettingsPage:${correlationId}] Attempting to save setting: ${id}`);
             const res = await fetch('/api/settings/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -97,21 +99,20 @@ export default function SettingsPage() {
                 })
             });
 
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`Server returned ${res.status}: ${text.substring(0, 100)}`);
-            }
-
             const result = await res.json();
-            if (result.success) {
-                alert("Nastavenie uložené");
+
+            if (res.ok && result.success) {
+                alert("Nastavenie úspešne uložené ✅");
                 fetchSettings();
             } else {
-                alert("Chyba: " + (result.error || "Neznáma chyba servera"));
+                const errorInfo = result.error || "Neznáma chyba";
+                const stackInfo = result.stack ? `\n\nTECHNICAL DETAILS:\n${result.stack}` : '';
+                console.error(`[SettingsPage:${correlationId}] Save failed:`, result);
+                alert(`CHYBA PRI UKLADANÍ (Ref: ${correlationId})\n\nSpráva: ${errorInfo}${stackInfo}`);
             }
         } catch (e: any) {
-            console.error("Setting save error:", e);
-            alert("Chyba pri ukladaní nastavania: " + e.message);
+            console.error(`[SettingsPage:${correlationId}] Connection error:`, e);
+            alert(`CHYBA PRIPOJENIA k serveru (Ref: ${correlationId})\n\n${e.message}`);
         } finally {
             setSaving(null);
         }
