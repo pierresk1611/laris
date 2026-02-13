@@ -3,12 +3,20 @@ import axios from "axios";
 import mammoth from "mammoth";
 import Groq from "groq-sdk";
 
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY || "",
-});
+import { getSetting } from "@/lib/settings";
 
 export async function POST(req: NextRequest) {
     try {
+        const groqApiKey = await getSetting('GROQ_API_KEY') || process.env.GROQ_API_KEY;
+
+        if (!groqApiKey) {
+            return NextResponse.json({
+                success: false,
+                error: "GROQ_API_KEY is not configured in Settings"
+            }, { status: 500 });
+        }
+
+        const groq = new Groq({ apiKey: groqApiKey });
         const body = await req.json();
         const { fileUrl, fileName } = body;
 
@@ -16,12 +24,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: "Missing file URL" }, { status: 400 });
         }
 
-        if (!process.env.GROQ_API_KEY) {
-            return NextResponse.json({
-                success: false,
-                error: "GROQ_API_KEY is not configured"
-            }, { status: 500 });
-        }
 
         const ext = fileName?.split('.').pop()?.toLowerCase() || "";
         let rawText = "";

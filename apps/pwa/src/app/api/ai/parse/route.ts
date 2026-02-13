@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import Groq from "groq-sdk";
 
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY || "",
-});
+import { getSetting } from "@/lib/settings";
 
 export async function POST(req: NextRequest) {
     try {
+        const groqApiKey = await getSetting('GROQ_API_KEY') || process.env.GROQ_API_KEY;
+
+        if (!groqApiKey) {
+            return NextResponse.json({
+                success: false,
+                error: "GROQ_API_KEY is not configured. Please add it to Settings."
+            }, { status: 500 });
+        }
+
+        const groq = new Groq({ apiKey: groqApiKey });
         const body = await req.json();
         const { text, options } = body;
 
@@ -15,12 +23,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: "Missing data to parse" }, { status: 400 });
         }
 
-        if (!process.env.GROQ_API_KEY) {
-            return NextResponse.json({
-                success: false,
-                error: "GROQ_API_KEY is not configured. Please add it to your .env file."
-            }, { status: 500 });
-        }
 
         // Format the input for AI
         // If we have options (EPO), we use them. Otherwise we use the raw text.
