@@ -17,6 +17,7 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
+        console.log('Shops API: POST request body:', body);
 
         if (!body || body.url === undefined || body.ck === undefined || body.cs === undefined) {
             return NextResponse.json({
@@ -61,6 +62,7 @@ export async function DELETE(request: Request) {
 export async function PATCH(request: Request) {
     try {
         const body = await request.json();
+        console.log('Shops API: PATCH request body:', body);
         const { id, ...data } = body;
 
         const shop = await prisma.shop.update({

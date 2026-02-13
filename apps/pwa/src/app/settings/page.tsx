@@ -119,6 +119,8 @@ export default function SettingsPage() {
                 setTimeout(() => setConnectionStatus(prev => ({ ...prev, [id]: 'idle' })), 3000);
             } else {
                 setConnectionStatus(prev => ({ ...prev, [id]: 'error' }));
+                if (data.message) alert(data.message);
+                if (data.error && data.details) alert(`${data.error}: ${data.details}`);
             }
         } catch (e) {
             setConnectionStatus(prev => ({ ...prev, [id]: 'error' }));
