@@ -68,7 +68,12 @@ export async function GET(request: Request) {
 
         console.log('WooCommerce API: Fetching from:', apiUrl.replace(rawCk, '***').replace(rawCs, '***'));
 
-        const response = await fetch(apiUrl);
+        const response = await fetch(apiUrl, {
+            headers: {
+                'User-Agent': 'Laris-PWA/1.0',
+                'Accept': 'application/json'
+            }
+        });
         if (!response.ok) {
             throw new Error(`WooCommerce API error: ${response.statusText}`);
         }
@@ -107,10 +112,17 @@ export async function GET(request: Request) {
             ? apiUrl.replace(/consumer_key=[^&]+/, 'consumer_key=***').replace(/consumer_secret=[^&]+/, 'consumer_secret=***')
             : 'URL not constructed';
 
+        // Map common fetch errors
+        let errorHint = error.message;
+        if (error.message === 'fetch failed') {
+            errorHint = "Network connection failed (Vercel blocked by Shop Firewall or SSL issue). Try checking e-shop hosting limits or User-Agent requirements.";
+        }
+
         return NextResponse.json({
             success: false,
             error: "Failed to fetch orders from WooCommerce",
-            details: error.message,
+            details: errorHint,
+            error_stack: error.stack?.split('\n')[0],
             masked_url: maskedUrl,
             api_version: API_VERSION
         }, { status: 500 });

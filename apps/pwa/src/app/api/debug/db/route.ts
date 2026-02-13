@@ -15,7 +15,13 @@ export async function GET() {
             try {
                 const controller = new AbortController();
                 const id = setTimeout(() => controller.abort(), 3000);
-                const res = await fetch(s.url, { signal: controller.signal });
+                const res = await fetch(s.url, {
+                    signal: controller.signal,
+                    headers: {
+                        'User-Agent': 'Laris-Diagnostic/1.0',
+                        'Accept': '*/*'
+                    }
+                });
                 clearTimeout(id);
                 reachability = res.ok ? "UP" : `DOWN (${res.status})`;
             } catch (e: any) {
