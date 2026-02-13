@@ -126,4 +126,3 @@ export async function POST() {
         }, { status: errorStatus === 500 ? 500 : (typeof errorStatus === 'number' ? errorStatus : 500) });
     }
 }
-}
