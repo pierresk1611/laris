@@ -112,28 +112,30 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
 
                             {order.items?.map((item: any) => (
                                 <div key={item.id} className="mb-4 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-                                    <p className="font-bold text-slate-900 mb-1">• {item.name} ({item.quantity}ks)</p>
+                                    <p className="font-bold text-slate-900 mb-1">• {item.name}</p>
 
-                                    {/* Display all raw options (EPO) */}
-                                    {item.options && Object.entries(item.options).length > 0 ? (
+                                    {/* Display all raw options (EPO) - Filtered for technical fields */}
+                                    {item.options && Object.entries(item.options).filter(([k]) => !['epoQuantity', 'material', 'color', 'metalType'].includes(k)).length > 0 ? (
                                         <div className="bg-slate-50 rounded border border-slate-100 mt-2 overflow-hidden">
-                                            {Object.entries(item.options).map(([key, val]) => (
-                                                <div key={key} className="group flex flex-col border-b border-slate-100 last:border-0 p-2 hover:bg-slate-100 transition-colors">
-                                                    <div className="flex justify-between items-center mb-1">
-                                                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{key}</span>
-                                                        <button
-                                                            onClick={() => navigator.clipboard.writeText(val as string)}
-                                                            className="opacity-0 group-hover:opacity-100 text-[9px] text-blue-500 hover:text-blue-700 px-1"
-                                                            title="Kopírovať"
-                                                        >
-                                                            COPY
-                                                        </button>
+                                            {Object.entries(item.options)
+                                                .filter(([k]) => !['epoQuantity', 'material', 'color', 'metalType'].includes(k))
+                                                .map(([key, val]) => (
+                                                    <div key={key} className="group flex flex-col border-b border-slate-100 last:border-0 p-2 hover:bg-slate-100 transition-colors">
+                                                        <div className="flex justify-between items-center mb-1">
+                                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{key}</span>
+                                                            <button
+                                                                onClick={() => navigator.clipboard.writeText(val as string)}
+                                                                className="opacity-0 group-hover:opacity-100 text-[9px] text-blue-500 hover:text-blue-700 px-1"
+                                                                title="Kopírovať"
+                                                            >
+                                                                COPY
+                                                            </button>
+                                                        </div>
+                                                        <span className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed font-medium">
+                                                            {val as string}
+                                                        </span>
                                                     </div>
-                                                    <span className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed font-medium">
-                                                        {val as string}
-                                                    </span>
-                                                </div>
-                                            ))}
+                                                ))}
                                         </div>
                                     ) : (
                                         <p className="text-xs text-slate-400 italic mt-1">Žiadne extra dáta</p>
