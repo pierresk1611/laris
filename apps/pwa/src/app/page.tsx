@@ -70,19 +70,24 @@ export default function Dashboard() {
     fetchOrders();
   }, []);
 
-  // Shared Logic for Status Checking (1:1 consistency)
+  // Shared Logic for Status Checking (Refined for Active Workflow)
   const checkStatus = (order: any, key: string) => {
     const s = (order.status || '').toLowerCase().trim();
-    if (key === 'all') return true;
+
+    // "Active" View (Default): Hides completed, in_print, and drafts
+    if (key === 'all') {
+      const activeStatuses = ['processing', 'ai_processing', 'pending', 'on-hold', 'failed', 'error'];
+      return activeStatuses.includes(s);
+    }
 
     // AI Processing: Only things actually being processed by AI or Waiting for AI
     if (key === 'processing') {
       return s === 'processing' || s === 'ai_processing';
     }
 
-    // Pending: Waiting for user/admin action
+    // Pending: Waiting for user/admin action (Hiding checkout-draft as per user feedback "ghost orders")
     if (key === 'pending') {
-      return s === 'pending' || s === 'on-hold' || s === 'checkout-draft';
+      return s === 'pending' || s === 'on-hold';
     }
 
     // Errors
@@ -95,7 +100,7 @@ export default function Dashboard() {
 
   // Calculate dynamic counts
   const counts = {
-    all: orders.length,
+    all: orders.filter(o => checkStatus(o, 'all')).length,
     processing: orders.filter(o => checkStatus(o, 'processing')).length,
     pending: orders.filter(o => checkStatus(o, 'pending')).length,
     error: orders.filter(o => checkStatus(o, 'error')).length
