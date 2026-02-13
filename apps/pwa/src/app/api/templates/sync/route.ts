@@ -88,24 +88,29 @@ export async function POST() {
         });
 
     } catch (error: any) {
-        console.error("[DropboxSync] CRITICAL ERROR:", error);
+        console.error("[DropboxSync] CRITICAL ERROR DETAILS:", {
+            message: error.message,
+            status: error.status,
+            summary: error.error?.error_summary,
+            body: error.error
+        });
 
         let errorStatus = error.status || 500;
         let errorCode = 'SYNC_ERROR';
-        let userMessage = 'Synchronizácia zlyhala.';
+        let userMessage = error.message || 'Synchronizácia zlyhala.';
 
         if (errorStatus === 401) {
             errorCode = 'UNAUTHORIZED';
             userMessage = 'Neplatný alebo expirovaný Dropbox token. Skontrolujte kľúč v Nastaveniach.';
         } else if (errorStatus === 409 || (error.error && error.error.error_summary?.includes('path/not_found'))) {
             errorCode = 'PATH_NOT_FOUND';
-            userMessage = 'Priečinok /TEMPLATES nebol v Dropboxe nájdený. Skontrolujte štruktúru priečinkov.';
+            userMessage = `Priečinok "${folderPath}" nebol v Dropboxe nájdený. Skontrolujte názov a štruktúru.`;
         } else if (errorStatus === 400) {
             errorCode = 'BAD_REQUEST';
-            userMessage = 'Chybná požiadavka (pravdepodobne nesprávny formát tokenu).';
+            userMessage = 'Chybná požiadavka (pravdepodobne nesprávny formát tokenu alebo nepovolené znaky v ceste).';
         }
 
-        // Detailed debug info
+        // Detailed debug info for the response
         const debugInfo = {
             message: error.message,
             status: error.status,
@@ -114,12 +119,12 @@ export async function POST() {
             stack: error.stack
         };
 
-        // Store failure status
+        // Store failure status in DB
         try {
             // @ts-ignore
             await prisma.setting.upsert({
                 where: { id: 'LAST_DROPBOX_SYNC_STATUS' },
-                update: { value: `ERROR: ${errorCode} (${errorStatus})`, category: 'SYSTEM' },
+                update: { value: `ERROR: ${errorCode} (${errorStatus}) - ${error.message?.substring(0, 50)}`, category: 'SYSTEM' },
                 create: { id: 'LAST_DROPBOX_SYNC_STATUS', value: `ERROR: ${errorCode} (${errorStatus})`, category: 'SYSTEM' }
             });
         } catch (e) { }
@@ -129,7 +134,7 @@ export async function POST() {
             error: errorCode,
             message: userMessage,
             debug: debugInfo,
-            details: error.message || 'Unknown error'
-        }, { status: errorStatus === 500 ? 500 : errorStatus });
+            details: error.message || 'Unknown technical error'
+        }, { status: errorStatus === 500 ? 500 : (typeof errorStatus === 'number' ? errorStatus : 500) });
     }
 }
