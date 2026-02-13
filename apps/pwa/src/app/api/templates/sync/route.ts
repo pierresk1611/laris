@@ -5,6 +5,8 @@ import { Dropbox } from 'dropbox';
 
 export async function POST() {
     console.log("[DropboxSync] STARTing template synchronization...");
+    let folderPath = '/TEMPLATES';
+
     try {
         // 1. Fetch credentials
         console.log("[DropboxSync] Checkpoint 1: Fetching settings...");
@@ -14,7 +16,7 @@ export async function POST() {
         const accessToken = await getSetting('DROPBOX_ACCESS_TOKEN');
         const customPath = await getSetting('DROPBOX_FOLDER_PATH');
 
-        const folderPath = customPath ? (customPath.startsWith('/') ? customPath : `/${customPath}`) : '/TEMPLATES';
+        folderPath = customPath?.trim() ? (customPath.trim().startsWith('/') ? customPath.trim() : `/${customPath.trim()}`) : '/TEMPLATES';
         console.log("[DropboxSync] Checkpoint 1.b: Settings loaded.", { folderPath, hasAccess: !!accessToken, hasRefresh: !!refreshToken });
 
         let dbx;
@@ -88,16 +90,12 @@ export async function POST() {
         });
 
     } catch (error: any) {
-        console.error("[DropboxSync] CRITICAL ERROR DETAILS:", {
-            message: error.message,
-            status: error.status,
-            summary: error.error?.error_summary,
-            body: error.error
-        });
+        console.error("[DropboxSync] CRITICAL ERROR DETAILS:", error);
 
-        let errorStatus = error.status || 500;
+        let errorStatus = typeof error.status === 'number' ? error.status : 500;
         let errorCode = 'SYNC_ERROR';
-        let userMessage = error.message || 'Synchronizácia zlyhala.';
+        // Try to find a message in the object if .message is empty
+        let userMessage = error.message || (error.error?.error_summary) || 'Synchronizácia zlyhala (Neznáma chyba SDK).';
 
         if (errorStatus === 401) {
             errorCode = 'UNAUTHORIZED';
@@ -110,21 +108,12 @@ export async function POST() {
             userMessage = 'Chybná požiadavka (pravdepodobne nesprávny formát tokenu alebo nepovolené znaky v ceste).';
         }
 
-        // Detailed debug info for the response
-        const debugInfo = {
-            message: error.message,
-            status: error.status,
-            error_summary: error.error?.error_summary,
-            error_details: error.error,
-            stack: error.stack
-        };
-
         // Store failure status in DB
         try {
             // @ts-ignore
             await prisma.setting.upsert({
                 where: { id: 'LAST_DROPBOX_SYNC_STATUS' },
-                update: { value: `ERROR: ${errorCode} (${errorStatus}) - ${error.message?.substring(0, 50)}`, category: 'SYSTEM' },
+                update: { value: `ERROR: ${errorCode} (${errorStatus}) - ${userMessage.substring(0, 50)}`, category: 'SYSTEM' },
                 create: { id: 'LAST_DROPBOX_SYNC_STATUS', value: `ERROR: ${errorCode} (${errorStatus})`, category: 'SYSTEM' }
             });
         } catch (e) { }
@@ -133,8 +122,8 @@ export async function POST() {
             success: false,
             error: errorCode,
             message: userMessage,
-            debug: debugInfo,
             details: error.message || 'Unknown technical error'
         }, { status: errorStatus === 500 ? 500 : (typeof errorStatus === 'number' ? errorStatus : 500) });
     }
+}
 }
