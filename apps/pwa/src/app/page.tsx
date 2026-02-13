@@ -12,10 +12,10 @@ import {
 } from "lucide-react";
 
 const stats = [
-  { label: "Nové objednávky", value: "12", icon: ScanSearch, color: "text-blue-600" },
-  { label: "AI Spracováva", value: "5", icon: Cpu, color: "text-purple-600" },
-  { label: "Čaká na kontrolu", value: "8", icon: Clock, color: "text-orange-600" },
-  { label: "Chyby", value: "2", icon: AlertCircle, color: "text-red-600" },
+  { label: "Nové objednávky", value: "12", icon: ScanSearch, color: "text-blue-600", filterKey: "all", ringColor: "ring-blue-500" },
+  { label: "AI Spracováva", value: "5", icon: Cpu, color: "text-purple-600", filterKey: "processing", ringColor: "ring-purple-500" },
+  { label: "Čaká na kontrolu", value: "8", icon: Clock, color: "text-orange-600", filterKey: "pending", ringColor: "ring-orange-500" },
+  { label: "Chyby", value: "2", icon: AlertCircle, color: "text-red-600", filterKey: "error", ringColor: "ring-red-500" },
 ];
 
 const mockOrders = [
@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState('all');
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -76,6 +77,16 @@ export default function Dashboard() {
     fetchOrders();
   }, []);
 
+  // Filter logic
+  const filteredOrders = orders.filter(order => {
+    const s = (order.status || '').toLowerCase();
+    if (filterStatus === 'all') return true;
+    if (filterStatus === 'processing') return s.includes('processing') || s.includes('print') || s === 'ai_processing';
+    if (filterStatus === 'pending') return s === 'pending' || s === 'on-hold' || s === 'checkout-draft' || s.includes('wait');
+    if (filterStatus === 'error') return s === 'failed' || s === 'cancelled' || s === 'error';
+    return true;
+  });
+
   return (
     <div>
       <AppHeader title="Prehľad" />
@@ -84,8 +95,14 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
         {stats.map((stat) => {
           const Icon = stat.icon;
+          const isActive = filterStatus === stat.filterKey;
+
           return (
-            <div key={stat.label} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
+            <div
+              key={stat.label}
+              onClick={() => setFilterStatus(stat.filterKey)}
+              className={`bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all cursor-pointer ${isActive ? `ring-2 ${stat.ringColor} ring-offset-2` : ''}`}
+            >
               <div className={`absolute top-0 left-0 w-1 h-full ${stat.color.replace('text', 'bg')}`} />
               <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-xl bg-slate-50 group-hover:scale-110 transition-transform`}>
@@ -105,9 +122,16 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex justify-between items-center">
           <h2 className="text-lg font-bold text-slate-900">Aktuálne fronty</h2>
-          <Link href="/orders" className="text-xs font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider">
-            Zobraziť všetko
-          </Link>
+          <div className="flex items-center gap-2">
+            {filterStatus !== 'all' && (
+              <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-500 uppercase">
+                Filter: {filterStatus}
+              </span>
+            )}
+            <Link href="/orders" className="text-xs font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider">
+              Zobraziť všetko
+            </Link>
+          </div>
         </div>
 
         {isLoading ? (
@@ -130,10 +154,13 @@ export default function Dashboard() {
             )}
             <Link href="/settings" className="mt-4 inline-block text-xs font-bold text-blue-600 uppercase underline">Skontrolovať API kľúče</Link>
           </div>
-        ) : orders.length === 0 ? (
+        ) : filteredOrders.length === 0 ? (
           <div className="p-12 text-center text-slate-400">
             <ScanSearch size={48} className="mx-auto mb-4 opacity-10" />
-            <p className="font-bold">Žiadne nové objednávky</p>
+            <p className="font-bold">{orders.length > 0 ? "Žiadne objednávky pre tento filter" : "Žiadne nové objednávky"}</p>
+            {orders.length > 0 && (
+              <button onClick={() => setFilterStatus('all')} className="mt-2 text-sm text-blue-500 font-bold underline">Zrušiť filter</button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -150,7 +177,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
