@@ -64,7 +64,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         id: item.id || 0,
                         name: item.name || "Neznáma položka",
                         price: item.price || "0",
-                        quantity: item.quantity || 1,
+                        quantity: epo.epoQuantity ? parseInt(epo.epoQuantity) : (item.quantity || 1),
                         templateKey,
                         templateId,
                         hasInvitation: needsInvitation(item.name || "", metaData),

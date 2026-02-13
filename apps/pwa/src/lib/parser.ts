@@ -70,12 +70,23 @@ export function parseEPO(metaData: any[]) {
     });
 
     // 3. Map for internal logic (backward compatibility)
-    // We scan the *result* keys now to find material/color
+    // We scan the *result* keys now to find material, color, and QUANTITY
     Object.entries(result).forEach(([label, value]) => {
         const l = label.toLowerCase();
+
+        // Material/Color
         if (l.includes("materiál") || l.includes("papier")) result.material = value;
         if (l.includes("farba")) result.color = value;
         if (l.includes("typ metalickej")) result.metalType = value;
+
+        // Custom Quantity (EPO often overrides Woo quantity)
+        // We look for "počet" or "kus" but avoid "obálok" if possible to prioritize the main item
+        if ((l.includes("počet") || l.includes("kusov")) && !l.includes("obálok")) {
+            const num = parseInt(value.toString().replace(/[^0-9]/g, ''));
+            if (!isNaN(num)) {
+                result.epoQuantity = num.toString();
+            }
+        }
     });
 
     return result;
