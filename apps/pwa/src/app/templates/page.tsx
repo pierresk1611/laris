@@ -75,18 +75,30 @@ export default function TemplatesPage() {
         toast.promise(promise, {
             loading: 'Pripájam sa k Dropboxu a hľadám šablóny...',
             success: async (res) => {
+                setIsSyncing(false);
+                if (!res.ok) {
+                    const text = await res.text();
+                    let errorMsg = `Server error ${res.status}`;
+                    try {
+                        const data = JSON.parse(text);
+                        errorMsg = data.message || errorMsg;
+                    } catch (e) { }
+                    throw new Error(errorMsg);
+                }
+
                 const data = await res.json();
-                if (res.ok && data.success) {
+                if (data.success) {
                     fetchData();
-                    setIsSyncing(false);
                     return data.message || `Úspešne synchronizovaných ${data.count} šablón.`;
                 } else {
                     throw new Error(data.message || 'Chyba pri synchronizácii');
                 }
             },
-            error: (err) => {
+            error: (err: any) => {
                 setIsSyncing(false);
-                return err.message || 'Nepodarilo sa spojiť s Dropboxom.';
+                console.error('[DropboxSyncToast] Error details:', err);
+                const message = err.message || (typeof err === 'string' ? err : 'Zlyhalo sieťové spojenie alebo server neodpovedá JSON-om.');
+                return `CHYBA: ${message}`;
             }
         });
     };
