@@ -139,22 +139,30 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                             )}
 
                                             {Object.entries(item.options)
-                                                .filter(([key, val]) => key !== 'downloads' && typeof val !== 'object')
+                                                .filter(([key]) => key !== 'downloads')
                                                 .map(([key, val]) => (
                                                     <div key={key} className="group flex flex-col border-b border-slate-100 last:border-0 p-2 hover:bg-slate-100 transition-colors">
                                                         <div className="flex justify-between items-center mb-1">
                                                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{key}</span>
                                                             <button
-                                                                onClick={() => navigator.clipboard.writeText(String(val))}
+                                                                onClick={() => navigator.clipboard.writeText(typeof val === 'object' ? JSON.stringify(val) : String(val))}
                                                                 className="opacity-0 group-hover:opacity-100 text-[9px] text-blue-500 hover:text-blue-700 px-1"
                                                                 title="Kopírovať"
                                                             >
                                                                 COPY
                                                             </button>
                                                         </div>
-                                                        <span className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed font-medium">
-                                                            {String(val)}
-                                                        </span>
+                                                        <div className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed font-medium">
+                                                            {typeof val === 'object' && val !== null && 'url' in (val as any) ? (
+                                                                <div className="mt-1 p-2 bg-blue-50 border border-blue-100 rounded flex items-center gap-2">
+                                                                    <a href={(val as any).url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline flex items-center gap-1 font-medium">
+                                                                        <span>📎</span> Stiahnuť {(val as any).name || 'súbor'}
+                                                                    </a>
+                                                                </div>
+                                                            ) : (
+                                                                <span>{String(val)}</span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 ))}
                                         </div>
