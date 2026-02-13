@@ -203,7 +203,7 @@ export default function SettingsPage() {
                     <div className="p-6 border-b border-slate-50 flex justify-between items-center">
                         <h2 className="text-lg font-bold text-slate-900 flex items-center gap-3">
                             <Globe className="text-blue-500" size={20} />
-                            <span>Prepojené E-shopy (WooCommerce)</span>
+                            <span>Prepojené E-shopy</span>
                         </h2>
                         <button
                             onClick={addShop}
