@@ -17,11 +17,39 @@ export async function GET() {
             prisma.aiPattern.count()
         ]);
 
-        // Mask secret values for the frontend
-        const maskedSettings = settings.map((s: any) => ({
-            ...s,
-            value: s.isSecret ? "********" : s.value
-        }));
+        const REQUIRED_KEYS = [
+            { id: 'GROQ_API_KEY', category: 'AI', isSecret: true },
+            { id: 'OPENAI_API_KEY', category: 'AI', isSecret: true },
+            { id: 'DROPBOX_ACCESS_TOKEN', category: 'STORAGE', isSecret: true },
+            { id: 'AGENT_ACCESS_TOKEN', category: 'AGENT', isSecret: false },
+            { id: 'LOCAL_TEMPLATES_PATH', category: 'AGENT', isSecret: false },
+            { id: 'LOCAL_OUTPUT_PATH', category: 'AGENT', isSecret: false }
+        ];
+
+        // Merge DB settings with required keys to ensure frontend always sees them
+        const finalSettings = REQUIRED_KEYS.map(req => {
+            const found = settings.find((s: any) => s.id === req.id);
+            if (found) {
+                return {
+                    ...found,
+                    value: found.isSecret ? "********" : found.value
+                };
+            }
+            return {
+                ...req,
+                value: ""
+            };
+        });
+
+        // Add any other DB settings not in required list
+        settings.forEach((s: any) => {
+            if (!REQUIRED_KEYS.find(rk => rk.id === s.id)) {
+                finalSettings.push({
+                    ...s,
+                    value: s.isSecret ? "********" : s.value
+                });
+            }
+        });
 
         const maskedShops = shops.map((s: any) => ({
             ...s,
@@ -31,7 +59,7 @@ export async function GET() {
 
         return NextResponse.json({
             success: true,
-            settings: maskedSettings,
+            settings: finalSettings,
             shops: maskedShops,
             patternCount
         });
