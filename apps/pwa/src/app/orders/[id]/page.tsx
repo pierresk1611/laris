@@ -30,7 +30,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
     useEffect(() => {
         const fetchOrder = async () => {
             try {
-                const res = await fetch(`/api/woo/orders/${params.id}`);
+                const res = await fetch(`/api/woo/orders/${id}`);
                 const data = await res.json();
                 if (data.success) {
                     setOrder(data.order);
@@ -51,7 +51,7 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
             }
         };
         fetchOrder();
-    }, [params.id]);
+    }, [id]);
 
     if (isLoading) return <div className="p-12 text-center text-slate-400 font-bold">Načítavam objednávku...</div>;
     if (error || !order) return (
