@@ -82,7 +82,7 @@ export async function GET(request: Request) {
             throw new Error(orders.message || orders.code || "WooCommerce returned an unexpected response format (not an array)");
         }
 
-        const transformedOrders = await processOrders(orders, shop.url);
+        const transformedOrders = await processOrders(orders, shop.url, shop.name);
 
         return NextResponse.json({ success: true, orders: transformedOrders });
     } catch (error: any) {

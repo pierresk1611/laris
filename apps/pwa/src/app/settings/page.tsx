@@ -18,6 +18,7 @@ import { useState, useEffect } from "react";
 interface Shop {
     id: string;
     url: string;
+    name: string;
     ck: string;
     cs: string;
 }
@@ -49,7 +50,7 @@ export default function SettingsPage() {
     }, []);
 
     const addShop = async () => {
-        const newShopData = { url: '', ck: '', cs: '' };
+        const newShopData = { url: '', name: 'Môj E-shop', ck: '', cs: '' };
         try {
             const res = await fetch('/api/shops', {
                 method: 'POST',
@@ -223,7 +224,17 @@ export default function SettingsPage() {
                                     <Trash2 size={16} />
                                 </button>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Store Name / URL</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Názov e-shopu</label>
+                                    <input
+                                        type="text"
+                                        value={shop.name}
+                                        onChange={(e) => updateShopLocal(shop.id, 'name', e.target.value)}
+                                        placeholder="napr. Svadobky Mirka"
+                                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Doména / URL</label>
                                     <input
                                         type="text"
                                         value={shop.url}

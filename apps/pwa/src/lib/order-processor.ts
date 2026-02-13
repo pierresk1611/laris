@@ -22,13 +22,14 @@ export interface ProcessedOrder {
     currency: string;
     date: string;
     shopSource: string;
+    shopName: string;
     items: ProcessedItem[];
 }
 
 /**
  * Enriches raw WooCommerce orders with template information and metadata.
  */
-export async function processOrders(rawOrders: any[], shopSource: string): Promise<ProcessedOrder[]> {
+export async function processOrders(rawOrders: any[], shopSource: string, shopName: string): Promise<ProcessedOrder[]> {
     try {
         // 1. Pre-fetch all active templates to avoid N+1 queries
         const templates = await prisma.template.findMany({
@@ -87,6 +88,7 @@ export async function processOrders(rawOrders: any[], shopSource: string): Promi
                     currency: order.currency || "EUR",
                     date: order.date_created || new Date().toISOString(),
                     shopSource: cleanSource,
+                    shopName: shopName || cleanSource,
                     items
                 };
             } catch (err: any) {
@@ -95,11 +97,12 @@ export async function processOrders(rawOrders: any[], shopSource: string): Promi
                     id: order.id || 0,
                     number: "ERROR",
                     status: "error",
-                    customer: "Chyba spracovania",
+                    customer: `ERROR: ${err.message}`, // Diagnostic
                     total: "0",
                     currency: "EUR",
                     date: new Date().toISOString(),
                     shopSource: "Môj E-shop",
+                    shopName: shopName || "Môj E-shop",
                     items: []
                 };
             }

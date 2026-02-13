@@ -42,7 +42,7 @@ export async function GET(
         const order = await response.json();
 
         // Use our processor (wrap in array because processOrders expects an array)
-        const processed = await processOrders([order], shop.url);
+        const processed = await processOrders([order], shop.url, shop.name);
 
         return NextResponse.json({ success: true, order: processed[0] });
 

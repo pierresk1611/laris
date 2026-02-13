@@ -14,6 +14,7 @@ datasource db {
 model Shop {
   id        String   @id @default(cuid())
   url       String
+  name      String   @default("Môj E-shop")
   ck        String
   cs        String
   createdAt DateTime @default(now())

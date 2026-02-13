@@ -20,11 +20,12 @@ export async function POST(request: Request) {
         console.log('Shops API: POST attempt:', body);
 
         // Picking only allowed fields
-        const { url, ck, cs } = body;
+        const { url, name, ck, cs } = body;
 
         const shop = await prisma.shop.create({
             data: {
                 url: url || "",
+                name: name || "Môj E-shop",
                 ck: ck || "",
                 cs: cs || ""
             }
@@ -62,7 +63,7 @@ export async function PATCH(request: Request) {
         console.log('Shops API: PATCH attempt for id:', body.id);
 
         // Strictly whitelist fields for update
-        const { id, url, ck, cs } = body;
+        const { id, url, name, ck, cs } = body;
 
         if (!id) throw new Error("Missing shop ID");
 
@@ -70,6 +71,7 @@ export async function PATCH(request: Request) {
             where: { id },
             data: {
                 url: url !== undefined ? url : undefined,
+                name: name !== undefined ? name : undefined,
                 ck: ck !== undefined ? ck : undefined,
                 cs: cs !== undefined ? cs : undefined
             }
