@@ -31,28 +31,28 @@ export interface ProcessedOrder {
  */
 export async function processOrders(rawOrders: any[], shopSource: string, shopName: string): Promise<ProcessedOrder[]> {
     try {
-        if (!Array.isArray(rawOrders)) {
-            console.error("processOrders: rawOrders is not an array:", rawOrders);
+        if (!rawOrders || !Array.isArray(rawOrders)) {
             return [];
         }
 
-        // 1. Pre-fetch all active templates to avoid N+1 queries
-        // Use a safe wrapper to prevent database issues from killing the whole page
+        // 1. Pre-fetch all active templates
         const templates = await prisma.template.findMany({
             where: { status: 'ACTIVE' }
         }).catch((err: any) => {
             console.error("Prisma Templates fetch error:", err);
-            return []; // Fail gracefully with no templates
+            return [];
         });
 
-        // Create a map for fast lookup
         const templateMap = new Map(templates.map((t: any) => [t.key?.toUpperCase() || "UNKNOWN", t.id]));
 
         return rawOrders.map(order => {
             try {
-                if (!order) throw new Error("Order object is null or undefined");
+                if (!order || typeof order !== 'object') {
+                    throw new Error("Order data is not an object");
+                }
 
                 const items = (order.line_items || []).map((item: any) => {
+                    if (!item) return null;
                     const templateKey = extractTemplateKey(item.name || "");
                     const templateId = templateKey ? templateMap.get(templateKey) || null : null;
                     const metaData = item.meta_data || [];
@@ -69,9 +69,8 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         material: epo.material || null,
                         options: epo
                     };
-                });
+                }).filter((i: any) => i !== null);
 
-                // Robust Shop Name / Hostname extraction
                 const cleanSource = (() => {
                     const s = (shopSource || "").toLowerCase().trim();
                     if (!s || s === "url" || s.includes("woocommerce") || s.includes("localhost")) {
@@ -86,8 +85,8 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                 })();
 
                 return {
-                    id: order.id,
-                    number: order.number?.toString() || order.id?.toString() || "N/A",
+                    id: order.id || 0,
+                    number: order.number?.toString() || order.id?.toString() || "0000",
                     status: order.status || 'unknown',
                     customer: order.billing
                         ? `${order.billing.first_name || ''} ${order.billing.last_name || ''}`.trim() || "Bez mena"
@@ -99,13 +98,13 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     shopName: shopName || cleanSource,
                     items
                 };
-            } catch (err: any) {
-                console.error("Single order processing error:", err, order);
+            } catch (innerErr: any) {
+                console.error("Single order processing error:", innerErr);
                 return {
                     id: order?.id || 0,
                     number: "ERROR",
                     status: "error",
-                    customer: `CHYBA: ${err.message}`, // Diagnostic visible in UI
+                    customer: `CHYBA: ${innerErr.message || 'Neznáma chyba v procesore'}`,
                     total: "0",
                     currency: "EUR",
                     date: new Date().toISOString(),
@@ -117,7 +116,6 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
         });
     } catch (globalErr: any) {
         console.error("Global processOrders error:", globalErr);
-        // We still want to return an empty array if everything fails globally
         return [];
     }
 }
