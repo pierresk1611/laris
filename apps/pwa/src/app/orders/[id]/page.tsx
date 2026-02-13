@@ -10,7 +10,8 @@ import {
     FileText,
     Type,
     ImageIcon,
-    ScanSearch
+    ScanSearch,
+    FileUp
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, use } from "react";
@@ -194,9 +195,54 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                 {/* Middle: AI Editor */}
                 <div className="col-span-5 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Type size={16} className="text-blue-500" />
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Smart Editor</span>
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                                <Type size={16} className="text-blue-500" />
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Smart Editor</span>
+                            </div>
+
+                            {/* Import from File Button */}
+                            {order.items?.[0]?.downloads && order.items[0].downloads.length > 0 && (
+                                <button
+                                    onClick={async (e) => {
+                                        const btn = e.currentTarget;
+                                        const originalContent = btn.innerHTML;
+                                        btn.innerHTML = "⏳ IMPORTOVANIE...";
+                                        btn.disabled = true;
+
+                                        try {
+                                            const dl = order.items[0].downloads[0];
+                                            const res = await fetch('/api/ai/parse-file', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    fileUrl: dl.url,
+                                                    fileName: dl.name
+                                                })
+                                            });
+                                            const result = await res.json();
+                                            if (result.success && result.data) {
+                                                setAiData(prev => ({
+                                                    ...prev,
+                                                    names: result.data // result.data contains the newline separated string
+                                                }));
+                                            } else {
+                                                alert("Chyba importu: " + (result.error || "Nepodarilo sa spracovať súbor"));
+                                            }
+                                        } catch (err) {
+                                            console.error("File Import error:", err);
+                                            alert("Chyba spojenia pri importe");
+                                        } finally {
+                                            btn.innerHTML = originalContent;
+                                            btn.disabled = false;
+                                        }
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-600 border border-amber-100 rounded-full text-[9px] font-bold hover:bg-amber-100 transition-colors disabled:opacity-50"
+                                >
+                                    <FileUp size={12} />
+                                    <span>IMPORT ZO SÚBORU</span>
+                                </button>
+                            )}
                         </div>
                         <button
                             onClick={async (e) => {
