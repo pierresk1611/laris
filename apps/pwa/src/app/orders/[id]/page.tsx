@@ -24,7 +24,8 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
         names: "",
         date: "",
         location: "",
-        body: ""
+        body: "",
+        originalBody: ""
     });
 
     useEffect(() => {
@@ -46,7 +47,8 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                         names: "", // Clear to avoid wrong customer name guessing
                         date: "",  // Clear to avoid wrong order date
                         location: "",
-                        body: bodyText // Fill with the raw text for AI to parse
+                        body: bodyText, // Fill with the raw text for AI to parse
+                        originalBody: bodyText // Keep original for AI learning
                     });
                 } else {
                     setError(data.error);
@@ -206,6 +208,37 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                             className="text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:underline"
                         >
                             Pre-parsovať znova
+                        </button>
+                        <button
+                            onClick={async (e) => {
+                                const btn = e.currentTarget;
+                                const originalText = btn.innerText;
+                                btn.innerText = "⏳ Ukladám...";
+
+                                try {
+                                    await fetch('/api/ai/patterns', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            input: (aiData as any).originalBody || aiData.body,
+                                            output: {
+                                                names: aiData.names,
+                                                location: aiData.location,
+                                                date: aiData.date
+                                            }
+                                        })
+                                    });
+                                    btn.innerText = "✅ Uložené!";
+                                    setTimeout(() => btn.innerText = originalText, 2000);
+                                } catch (err) {
+                                    btn.innerText = "❌ Chyba";
+                                    setTimeout(() => btn.innerText = originalText, 2000);
+                                }
+                            }}
+                            className="text-[10px] font-bold text-green-600 uppercase tracking-widest hover:underline ml-4"
+                            title="Uložiť aktuálne dáta ako vzor pre AI"
+                        >
+                            🎓 Učiť AI
                         </button>
                     </div>
                     <div className="flex-1 p-6 space-y-6 overflow-y-auto">
