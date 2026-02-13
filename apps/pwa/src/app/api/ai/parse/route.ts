@@ -7,13 +7,16 @@ import { getSetting } from "@/lib/settings";
 export async function POST(req: NextRequest) {
     try {
         const groqApiKey = await getSetting('GROQ_API_KEY') || process.env.GROQ_API_KEY;
-        console.log(`AI Parse: retrieved API key (length: ${groqApiKey?.length || 0})`);
+        const keyPrefix = groqApiKey ? groqApiKey.substring(0, 5) : "NONE";
+        console.log(`AI Parse: retrieved API key (length: ${groqApiKey?.length || 0}, prefix: ${keyPrefix}...)`);
 
-        if (!groqApiKey) {
-            console.error("AI Parse: GROQ_API_KEY missing");
+        if (!groqApiKey || groqApiKey === "Decryption Error") {
+            console.error("AI Parse: GROQ_API_KEY missing or decryption failed");
             return NextResponse.json({
                 success: false,
-                error: "GROQ_API_KEY is not configured. Please add it to Settings."
+                error: groqApiKey === "Decryption Error"
+                    ? "Chyba dešifrovania kľúča. Skontrolujte ENCRYPTION_SECRET."
+                    : "GROQ_API_KEY is not configured. Please add it to Settings."
             }, { status: 500 });
         }
 
