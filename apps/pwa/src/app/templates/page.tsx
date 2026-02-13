@@ -70,35 +70,35 @@ export default function TemplatesPage() {
 
     const handleDropboxSync = async () => {
         setIsSyncing(true);
-        const promise = fetch('/api/templates/sync', { method: 'POST' });
 
-        toast.promise(promise, {
+        const syncPromise = async () => {
+            const res = await fetch('/api/templates/sync', { method: 'POST' });
+            if (!res.ok) {
+                const text = await res.text();
+                let errorDetails = `Status ${res.status}`;
+                try {
+                    const data = JSON.parse(text);
+                    errorDetails = data.message || data.details || errorDetails;
+                } catch (e) { }
+                throw new Error(errorDetails);
+            }
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message || 'Sync failed');
+            return data;
+        };
+
+        toast.promise(syncPromise(), {
             loading: 'Pripájam sa k Dropboxu a hľadám šablóny...',
-            success: async (res) => {
+            success: (data) => {
                 setIsSyncing(false);
-                if (!res.ok) {
-                    const text = await res.text();
-                    let errorMsg = `Server error ${res.status}`;
-                    try {
-                        const data = JSON.parse(text);
-                        errorMsg = data.message || errorMsg;
-                    } catch (e) { }
-                    throw new Error(errorMsg);
-                }
-
-                const data = await res.json();
-                if (data.success) {
-                    fetchData();
-                    return data.message || `Úspešne synchronizovaných ${data.count} šablón.`;
-                } else {
-                    throw new Error(data.message || 'Chyba pri synchronizácii');
-                }
+                fetchData();
+                return data.message || `Synchronizácia úspešná.`;
             },
             error: (err: any) => {
                 setIsSyncing(false);
-                console.error('[DropboxSyncToast] Error details:', err);
-                const message = err.message || (typeof err === 'string' ? err : 'Zlyhalo sieťové spojenie alebo server neodpovedá JSON-om.');
-                return `CHYBA: ${message}`;
+                console.error('[DropboxSyncToast] Error:', err);
+                const msg = err.message || 'Neznáma chyba';
+                return `SYNC_CHYBA: ${msg}`;
             }
         });
     };
