@@ -48,6 +48,12 @@ export function parseEPO(metaData: any[]) {
             const label = String(meta?.name || meta?.label || meta?.display_key || "").trim();
             const value = String(meta?.value || "").trim();
 
+            if (!label) return;
+
+            // Store raw value with label key for display
+            result[label] = value;
+
+            // Map known keys for easier access in code
             if (label.includes("Materiál") || label.includes("Papier")) result.material = value;
             if (label.includes("Farba")) result.color = value;
             if (label.includes("Typ metalickej")) result.metalType = value;

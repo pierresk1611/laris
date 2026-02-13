@@ -101,14 +101,23 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                             <strong>Zákazník:</strong> {order.customer} <br />
                             <strong>E-mail:</strong> {order.billing?.email || 'Nezadaný'} <br /><br />
 
-                            <strong>Položky:</strong><br />
                             {order.items?.map((item: any) => (
-                                <div key={item.id} className="mb-2">
-                                    • {item.name} ({item.quantity}ks) <br />
-                                    <span className="text-[11px] text-slate-400 ml-3">
-                                        Materiál: {item.material || 'Standard'} |
-                                        Šablóna: {item.templateKey || 'Nezistená'}
-                                    </span>
+                                <div key={item.id} className="mb-4 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+                                    <p className="font-bold text-slate-900 mb-1">• {item.name} ({item.quantity}ks)</p>
+
+                                    {/* Display all raw options (EPO) */}
+                                    {item.options && Object.entries(item.options).length > 0 && (
+                                        <div className="bg-slate-50 p-2 rounded border border-slate-100 mt-1 space-y-1">
+                                            {Object.entries(item.options).map(([key, val]) => (
+                                                <div key={key} className="flex flex-col border-l-2 border-slate-200 pl-2">
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">{key}</span>
+                                                    <span className="text-xs text-slate-700 whitespace-pre-wrap font-medium">
+                                                        {val as string}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>

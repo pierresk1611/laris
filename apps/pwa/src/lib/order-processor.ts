@@ -10,7 +10,7 @@ export interface ProcessedItem {
     templateId: string | null;
     hasInvitation: boolean;
     material: string | null;
-    options: any;
+    options: Record<string, string>;
 }
 
 export interface ProcessedOrder {
