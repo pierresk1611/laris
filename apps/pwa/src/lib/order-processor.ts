@@ -88,9 +88,21 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     id: order.id || 0,
                     number: order.number?.toString() || order.id?.toString() || "0000",
                     status: order.status || 'unknown',
-                    customer: order.billing
-                        ? `${order.billing.first_name || ''} ${order.billing.last_name || ''}`.trim() || "Bez mena"
-                        : "Bez mena",
+                    customer: (() => {
+                        const billName = `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim();
+                        if (billName) return billName;
+
+                        const shipName = `${order.shipping?.first_name || ''} ${order.shipping?.last_name || ''}`.trim();
+                        if (shipName) return shipName;
+
+                        const billCompany = (order.billing?.company || '').trim();
+                        if (billCompany) return billCompany;
+
+                        const shipCompany = (order.shipping?.company || '').trim();
+                        if (shipCompany) return shipCompany;
+
+                        return "Bez mena";
+                    })(),
                     total: order.total || "0",
                     currency: order.currency || "EUR",
                     date: order.date_created || new Date().toISOString(),
