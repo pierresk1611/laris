@@ -97,9 +97,9 @@ export default function SettingsPage() {
             });
             const data = await res.json();
             if (data.success) {
-                // Success - maybe show a small toast or just settle
+                alert("Nastavenia e-shopu boli úspešne uložené do databázy.");
             } else {
-                alert("Chyba pri ukladaní: " + (data.error || "Neznáma chyba"));
+                alert("Chyba pri ukladaní: " + (data.error || "Neznáma chyba") + (data.details ? ` (${data.details})` : ""));
             }
         } catch (e) {
             console.error("Failed to save shop", e);

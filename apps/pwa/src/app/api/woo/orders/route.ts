@@ -16,37 +16,44 @@ export async function GET(request: Request) {
         }
 
         if (!shop) {
-            return NextResponse.json({ success: true, orders: [] });
+            return NextResponse.json({ success: true, orders: [], message: "Shop not found." });
         }
 
-        // Debug logging for Vercel logs
-        console.log('WooCommerce API attempt for shop:', {
+        // Defensive extraction
+        const rawUrl = (shop.url || "").toString().trim();
+        const rawCk = (shop.ck || "").toString().trim();
+        const rawCs = (shop.cs || "").toString().trim();
+
+        console.log('WooCommerce API Debug:', {
             id: shop.id,
-            url: shop.url,
-            has_ck: !!shop.ck,
-            has_cs: !!shop.cs
+            url: rawUrl,
+            ck_len: rawCk.length,
+            cs_len: rawCs.length
         });
 
-        // Validation: If shop is empty or missing credentials
-        if (!shop.url || shop.url.trim() === "" || shop.url === "/" || !shop.url.startsWith("http")) {
+        // 1. URL Validation
+        if (!rawUrl || rawUrl === "" || rawUrl === "/" || !rawUrl.startsWith("http")) {
             return NextResponse.json({
                 success: true,
                 orders: [],
-                message: "Shop configuration incomplete or URL invalid (must start with http:// or https://)"
+                message: `Shop configuration incomplete or URL invalid. Detected: "${rawUrl}" (Must start with http:// or https://)`
             });
         }
 
-        if (!shop.ck || !shop.cs) {
+        // 2. Keys Validation
+        if (!rawCk || !rawCs) {
             return NextResponse.json({
                 success: true,
                 orders: [],
-                message: "Shop configuration incomplete (Keys missing)"
+                message: "Shop configuration incomplete (Consumer Key or Secret missing in database)."
             });
         }
 
-        // Remove trailing slash if present
-        const baseUrl = shop.url.trim().replace(/\/$/, "");
-        const apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${shop.ck.trim()}&consumer_secret=${shop.cs.trim()}&per_page=10`;
+        // 3. Construct URL
+        const baseUrl = rawUrl.replace(/\/$/, "");
+        const apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${rawCk}&consumer_secret=${rawCs}&per_page=10`;
+
+        console.log('WooCommerce API: Fetching from:', apiUrl.replace(rawCk, '***').replace(rawCs, '***'));
 
         const response = await fetch(apiUrl);
         if (!response.ok) {
