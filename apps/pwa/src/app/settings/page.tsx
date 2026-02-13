@@ -346,7 +346,36 @@ export default function SettingsPage() {
                         </h3>
                         <div className="space-y-6">
                             <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Dropbox Refresh Token</label>
+                                <label className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-2 block">Dočasný Access Token (Testovací)</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="password"
+                                        value={getSettingValue('DROPBOX_ACCESS_TOKEN')}
+                                        onChange={(e) => {
+                                            const newSettings = [...settings];
+                                            const idx = newSettings.findIndex(s => s.id === 'DROPBOX_ACCESS_TOKEN');
+                                            if (idx !== -1) newSettings[idx].value = e.target.value;
+                                            else newSettings.push({ id: 'DROPBOX_ACCESS_TOKEN', value: e.target.value, category: 'STORAGE', isSecret: true });
+                                            setSettings(newSettings);
+                                        }}
+                                        placeholder="Kód začínajúci na sl.u..."
+                                        className="flex-1 px-4 py-3 bg-blue-50/50 border border-blue-100 rounded-xl text-sm"
+                                    />
+                                    <button
+                                        onClick={() => handleSaveSetting('DROPBOX_ACCESS_TOKEN', getSettingValue('DROPBOX_ACCESS_TOKEN'), 'STORAGE', true)}
+                                        disabled={saving === 'DROPBOX_ACCESS_TOKEN'}
+                                        className="px-6 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100"
+                                    >
+                                        Testovať
+                                    </button>
+                                </div>
+                                <p className="text-[9px] text-slate-400 mt-1">
+                                    * POZOR: Tento kód expiruje po 4 hodinách. Pre trvalé riešenie vyplňte polia nižšie.
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Dropbox Refresh Token (Trvalý)</label>
                                 <div className="flex gap-2">
                                     <input
                                         type="password"

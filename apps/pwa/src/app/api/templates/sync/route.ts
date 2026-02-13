@@ -10,26 +10,28 @@ export async function POST() {
         const refreshToken = await getSetting('DROPBOX_REFRESH_TOKEN');
         const clientId = await getSetting('DROPBOX_APP_KEY');
         const clientSecret = await getSetting('DROPBOX_APP_SECRET');
+        const accessToken = await getSetting('DROPBOX_ACCESS_TOKEN');
 
-        if (!refreshToken || !clientId || !clientSecret) {
-            console.error("[DropboxSync] Missing required credentials:", {
-                hasToken: !!refreshToken,
-                hasId: !!clientId,
-                hasSecret: !!clientSecret
+        let dbx;
+
+        if (refreshToken && clientId && clientSecret) {
+            console.log("[DropboxSync] Using Refresh Token flow.");
+            dbx = new Dropbox({
+                clientId,
+                clientSecret,
+                refreshToken
             });
+        } else if (accessToken) {
+            console.log("[DropboxSync] Using temporary Access Token fallback.");
+            dbx = new Dropbox({ accessToken });
+        } else {
+            console.error("[DropboxSync] Missing required credentials.");
             return NextResponse.json({
                 success: false,
                 error: 'CREDENTIALS_MISSING',
-                message: 'Chýbajú prihlasovacie údaje pre Dropbox (Refresh Token, App Key alebo Secret). Skontrolujte Nastavenia.'
+                message: 'Chýbajú prihlasovacie údaje pre Dropbox. Vložte buď "Dočasný kód" (Testovať) alebo kompletné údaje pre Refresh Token v Nastaveniach.'
             }, { status: 400 });
         }
-
-        // 2. Initialize Dropbox
-        const dbx = new Dropbox({
-            clientId,
-            clientSecret,
-            refreshToken
-        });
 
         // 3. Fetch file list from /TEMPLATES
         console.log("[DropboxSync] Listing folders in /TEMPLATES...");
