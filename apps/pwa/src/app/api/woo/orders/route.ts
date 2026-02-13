@@ -4,6 +4,9 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+    const API_VERSION = "v1.0.2-defensive";
+    console.log(`[WooCommerce API ${API_VERSION}] Incoming request`);
+
     try {
         const { searchParams } = new URL(request.url);
         const shopId = searchParams.get('shopId');
@@ -16,7 +19,12 @@ export async function GET(request: Request) {
         }
 
         if (!shop) {
-            return NextResponse.json({ success: true, orders: [], message: "Shop not found." });
+            return NextResponse.json({
+                success: false,
+                orders: [],
+                error: "Shop not found in database",
+                api_version: API_VERSION
+            }, { status: 404 });
         }
 
         // Defensive extraction
@@ -34,19 +42,23 @@ export async function GET(request: Request) {
         // 1. URL Validation
         if (!rawUrl || rawUrl === "" || rawUrl === "/" || !rawUrl.startsWith("http")) {
             return NextResponse.json({
-                success: true,
+                success: false,
                 orders: [],
-                message: `Shop configuration incomplete or URL invalid. Detected: "${rawUrl}" (Must start with http:// or https://)`
-            });
+                error: "Validation Error",
+                details: `Shop configuration incomplete or URL invalid. Detected: "${rawUrl}" (Must start with http:// or https://)`,
+                api_version: API_VERSION
+            }, { status: 400 });
         }
 
         // 2. Keys Validation
         if (!rawCk || !rawCs) {
             return NextResponse.json({
-                success: true,
+                success: false,
                 orders: [],
-                message: "Shop configuration incomplete (Consumer Key or Secret missing in database)."
-            });
+                error: "Validation Error",
+                details: "Shop configuration incomplete (Consumer Key or Secret missing in database).",
+                api_version: API_VERSION
+            }, { status: 400 });
         }
 
         // 3. Construct URL
