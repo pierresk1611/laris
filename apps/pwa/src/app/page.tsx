@@ -11,13 +11,6 @@ import {
   ExternalLink
 } from "lucide-react";
 
-const stats = [
-  { label: "Nové objednávky", value: "12", icon: ScanSearch, color: "text-blue-600", filterKey: "all", ringColor: "ring-blue-500" },
-  { label: "AI Spracováva", value: "5", icon: Cpu, color: "text-purple-600", filterKey: "processing", ringColor: "ring-purple-500" },
-  { label: "Čaká na kontrolu", value: "8", icon: Clock, color: "text-orange-600", filterKey: "pending", ringColor: "ring-orange-500" },
-  { label: "Chyby", value: "2", icon: AlertCircle, color: "text-red-600", filterKey: "error", ringColor: "ring-red-500" },
-];
-
 const mockOrders = [
   {
     id: "#4532",
@@ -77,15 +70,33 @@ export default function Dashboard() {
     fetchOrders();
   }, []);
 
-  // Filter logic
-  const filteredOrders = orders.filter(order => {
+  // Shared Logic for Status Checking (1:1 consistency)
+  const checkStatus = (order: any, key: string) => {
     const s = (order.status || '').toLowerCase();
-    if (filterStatus === 'all') return true;
-    if (filterStatus === 'processing') return s.includes('processing') || s.includes('print') || s === 'ai_processing';
-    if (filterStatus === 'pending') return s === 'pending' || s === 'on-hold' || s === 'checkout-draft' || s.includes('wait');
-    if (filterStatus === 'error') return s === 'failed' || s === 'cancelled' || s === 'error';
-    return true;
-  });
+    if (key === 'all') return true;
+    if (key === 'processing') return s.includes('processing') || s.includes('print') || s === 'ai_processing';
+    if (key === 'pending') return s === 'pending' || s === 'on-hold' || s === 'checkout-draft' || s.includes('wait');
+    if (key === 'error') return s === 'failed' || s === 'cancelled' || s === 'error';
+    return false;
+  };
+
+  // Calculate dynamic counts
+  const counts = {
+    all: orders.length,
+    processing: orders.filter(o => checkStatus(o, 'processing')).length,
+    pending: orders.filter(o => checkStatus(o, 'pending')).length,
+    error: orders.filter(o => checkStatus(o, 'error')).length
+  };
+
+  const stats = [
+    { label: "Nové objednávky", value: counts.all, icon: ScanSearch, color: "text-blue-600", filterKey: "all", ringColor: "ring-blue-500" },
+    { label: "AI Spracováva", value: counts.processing, icon: Cpu, color: "text-purple-600", filterKey: "processing", ringColor: "ring-purple-500" },
+    { label: "Čaká na kontrolu", value: counts.pending, icon: Clock, color: "text-orange-600", filterKey: "pending", ringColor: "ring-orange-500" },
+    { label: "Chyby", value: counts.error, icon: AlertCircle, color: "text-red-600", filterKey: "error", ringColor: "ring-red-500" },
+  ];
+
+  // Filter logic
+  const filteredOrders = orders.filter(order => checkStatus(order, filterStatus));
 
   return (
     <div>
@@ -110,7 +121,7 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
-                  <p className="text-2xl font-black text-slate-900">{stat.label === "Nové objednávky" ? orders.length : stat.value}</p>
+                  <p className="text-2xl font-black text-slate-900">{stat.value}</p>
                 </div>
               </div>
             </div>
