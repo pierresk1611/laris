@@ -72,11 +72,24 @@ export default function Dashboard() {
 
   // Shared Logic for Status Checking (1:1 consistency)
   const checkStatus = (order: any, key: string) => {
-    const s = (order.status || '').toLowerCase();
+    const s = (order.status || '').toLowerCase().trim();
     if (key === 'all') return true;
-    if (key === 'processing') return s.includes('processing') || s.includes('print') || s === 'ai_processing';
-    if (key === 'pending') return s === 'pending' || s === 'on-hold' || s === 'checkout-draft' || s.includes('wait');
-    if (key === 'error') return s === 'failed' || s === 'cancelled' || s === 'error';
+
+    // AI Processing: Only things actually being processed by AI or Waiting for AI
+    if (key === 'processing') {
+      return s === 'processing' || s === 'ai_processing';
+    }
+
+    // Pending: Waiting for user/admin action
+    if (key === 'pending') {
+      return s === 'pending' || s === 'on-hold' || s === 'checkout-draft';
+    }
+
+    // Errors
+    if (key === 'error') {
+      return s === 'failed' || s === 'cancelled' || s === 'error';
+    }
+
     return false;
   };
 
