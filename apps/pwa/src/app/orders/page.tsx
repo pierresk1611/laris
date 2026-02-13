@@ -75,7 +75,9 @@ export default function OrdersPage() {
                             <div className="flex justify-between items-start mb-4">
                                 <div>
                                     <h3 className="text-lg font-black text-slate-900">#{order.number}</h3>
-                                    <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">WooCommerce</p>
+                                    <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">
+                                        {order.shopSource.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
+                                    </p>
                                 </div>
                                 <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${order.status === 'processing' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'
                                     }`}>

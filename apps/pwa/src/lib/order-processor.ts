@@ -21,13 +21,14 @@ export interface ProcessedOrder {
     total: string;
     currency: string;
     date: string;
+    shopSource: string;
     items: ProcessedItem[];
 }
 
 /**
  * Enriches raw WooCommerce orders with template information and metadata.
  */
-export async function processOrders(rawOrders: any[]): Promise<ProcessedOrder[]> {
+export async function processOrders(rawOrders: any[], shopSource: string): Promise<ProcessedOrder[]> {
     // 1. Pre-fetch all active templates to avoid N+1 queries
     const templates = await prisma.template.findMany({
         where: { status: 'ACTIVE' }
@@ -64,6 +65,7 @@ export async function processOrders(rawOrders: any[]): Promise<ProcessedOrder[]>
             total: order.total,
             currency: order.currency,
             date: order.date_created,
+            shopSource,
             items
         };
     });

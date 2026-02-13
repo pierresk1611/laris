@@ -153,7 +153,9 @@ export default function Dashboard() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-900">#{order.number}</span>
-                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter truncate w-24">Live Store</span>
+                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter truncate w-24">
+                          {order.shopSource?.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] || 'Live Store'}
+                        </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-slate-600 font-medium">{order.customer}</td>
