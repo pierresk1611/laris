@@ -17,30 +17,27 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        console.log('Shops API: POST request body:', body);
+        console.log('Shops API: POST attempt:', body);
 
-        if (!body || body.url === undefined || body.ck === undefined || body.cs === undefined) {
-            return NextResponse.json({
-                success: false,
-                error: 'Missing required fields',
-                details: 'URL, Consumer Key, and Consumer Secret must be provided (can be empty strings).'
-            }, { status: 400 });
-        }
-
+        // Picking only allowed fields
         const { url, ck, cs } = body;
 
         const shop = await prisma.shop.create({
-            data: { url, ck, cs }
+            data: {
+                url: url || "",
+                ck: ck || "",
+                cs: cs || ""
+            }
         });
 
+        console.log('Shops API: Created shop:', shop.id);
         return NextResponse.json({ success: true, shop });
     } catch (error: any) {
         console.error("Shop creation error:", error);
         return NextResponse.json({
             success: false,
             error: 'Failed to add shop',
-            details: error.message,
-            prisma_error_code: error.code
+            details: error.message
         }, { status: 400 });
     }
 }
@@ -62,16 +59,26 @@ export async function DELETE(request: Request) {
 export async function PATCH(request: Request) {
     try {
         const body = await request.json();
-        console.log('Shops API: PATCH request body:', body);
-        const { id, ...data } = body;
+        console.log('Shops API: PATCH attempt for id:', body.id);
+
+        // Strictly whitelist fields for update
+        const { id, url, ck, cs } = body;
+
+        if (!id) throw new Error("Missing shop ID");
 
         const shop = await prisma.shop.update({
             where: { id },
-            data
+            data: {
+                url: url !== undefined ? url : undefined,
+                ck: ck !== undefined ? ck : undefined,
+                cs: cs !== undefined ? cs : undefined
+            }
         });
 
+        console.log('Shops API: Updated shop successful URL:', shop.url);
         return NextResponse.json({ success: true, shop });
     } catch (error: any) {
+        console.error('Shops API: Update failed:', error);
         return NextResponse.json({ success: false, error: 'Update failed', details: error.message }, { status: 400 });
     }
 }
