@@ -24,13 +24,14 @@ export interface ProcessedOrder {
     date: string;
     shopSource: string;
     shopName: string;
+    shopId: string;
     items: ProcessedItem[];
 }
 
 /**
- * Enriches raw WooCommerce orders with template information and metadata.
+ * Enriches raw WooCommerce orders with template information and modified metadata.
  */
-export async function processOrders(rawOrders: any[], shopSource: string, shopName: string): Promise<ProcessedOrder[]> {
+export async function processOrders(rawOrders: any[], shopSource: string, shopName: string, shopId: string): Promise<ProcessedOrder[]> {
     try {
         if (!rawOrders || !Array.isArray(rawOrders)) {
             return [];
@@ -110,6 +111,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     date: order.date_created || new Date().toISOString(),
                     shopSource: cleanSource,
                     shopName: shopName || cleanSource,
+                    shopId: shopId || "",
                     items
                 };
             } catch (innerErr: any) {
@@ -124,6 +126,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     date: new Date().toISOString(),
                     shopSource: "Môj E-shop",
                     shopName: shopName || "Môj E-shop",
+                    shopId: shopId || "",
                     items: []
                 };
             }
