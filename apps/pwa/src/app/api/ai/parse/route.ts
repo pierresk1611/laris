@@ -7,8 +7,10 @@ import { getSetting } from "@/lib/settings";
 export async function POST(req: NextRequest) {
     try {
         const groqApiKey = await getSetting('GROQ_API_KEY') || process.env.GROQ_API_KEY;
+        console.log(`AI Parse: retrieved API key (length: ${groqApiKey?.length || 0})`);
 
         if (!groqApiKey) {
+            console.error("AI Parse: GROQ_API_KEY missing");
             return NextResponse.json({
                 success: false,
                 error: "GROQ_API_KEY is not configured. Please add it to Settings."
@@ -34,6 +36,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Fetch few-shot examples from patterns
+        // @ts-ignore
         const patterns = await prisma.aiPattern.findMany({
             take: 3,
             orderBy: { createdAt: 'desc' }
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
 
         const examplesPrompt = patterns.length > 0
             ? "Here are some examples of how to parse similar data:\n\n" +
-            patterns.map(p => `Input:\n${p.input}\nOutput:\n${JSON.stringify(p.output, null, 2)}`).join("\n\n")
+            patterns.map((p: any) => `Input:\n${p.input}\nOutput:\n${JSON.stringify(p.output, null, 2)}`).join("\n\n")
             : "No examples available yet. Use your best judgment.";
 
         const systemPrompt = `You are a specialized parser for gift and wedding store orders. 
@@ -69,16 +72,17 @@ Do not include any prose or explanation.`;
         });
 
         const rawResult = completion.choices[0].message.content || "{}";
+        console.log("AI Parse: Result received from Groq");
         const parsedResult = JSON.parse(rawResult);
 
         return NextResponse.json({ success: true, data: parsedResult });
 
     } catch (e: any) {
-        console.error("Groq AI Error:", e);
+        console.error("Groq AI API Route Error:", e);
         return NextResponse.json({
             success: false,
-            error: "Failed to parse data with AI",
-            details: e.message
+            error: `AI Error: ${e.message}`,
+            details: e.stack
         }, { status: 500 });
     }
 }

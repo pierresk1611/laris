@@ -279,7 +279,9 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                             body: "" // Clear body to avoid duplication
                                         }));
                                     } else {
-                                        alert("AI Chyba: " + (result.error || "Nepodarilo sa parsovať"));
+                                        const errorMsg = result.error || "Nepodarilo sa parsovať";
+                                        const detailsMsg = result.details ? `\n\nDetaily: ${result.details}` : "";
+                                        alert("AI Chyba: " + errorMsg + detailsMsg);
                                     }
                                 } catch (err) {
                                     console.error("AI Parse error:", err);

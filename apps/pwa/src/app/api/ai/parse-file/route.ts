@@ -8,8 +8,10 @@ import { getSetting } from "@/lib/settings";
 export async function POST(req: NextRequest) {
     try {
         const groqApiKey = await getSetting('GROQ_API_KEY') || process.env.GROQ_API_KEY;
+        console.log(`AI Parse File: retrieved API key (length: ${groqApiKey?.length || 0})`);
 
         if (!groqApiKey) {
+            console.error("AI Parse File: GROQ_API_KEY missing");
             return NextResponse.json({
                 success: false,
                 error: "GROQ_API_KEY is not configured in Settings"
@@ -66,6 +68,7 @@ ${rawText.substring(0, 10000)} // Limit to 10k chars for sanity
         });
 
         const rawResult = completion.choices[0].message.content || "{}";
+        console.log("AI Parse File: Result received from Groq");
         const parsedResult = JSON.parse(rawResult);
 
         return NextResponse.json({
@@ -75,11 +78,11 @@ ${rawText.substring(0, 10000)} // Limit to 10k chars for sanity
         });
 
     } catch (e: any) {
-        console.error("File Parse Error:", e);
+        console.error("File Parse API Route Error:", e);
         return NextResponse.json({
             success: false,
-            error: "Failed to process file",
-            details: e.message
+            error: `File processing error: ${e.message}`,
+            details: e.stack
         }, { status: 500 });
     }
 }
