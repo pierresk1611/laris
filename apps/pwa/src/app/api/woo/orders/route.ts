@@ -100,10 +100,18 @@ export async function GET(request: Request) {
         return NextResponse.json({ success: true, orders: transformedOrders });
     } catch (error: any) {
         console.error("WooCommerce fetch error:", error);
+
+        // Construct a masked URL for the error response
+        const maskedUrl = (typeof apiUrl !== 'undefined')
+            ? apiUrl.replace(/consumer_key=[^&]+/, 'consumer_key=***').replace(/consumer_secret=[^&]+/, 'consumer_secret=***')
+            : 'URL not constructed';
+
         return NextResponse.json({
             success: false,
             error: "Failed to fetch orders from WooCommerce",
-            details: error.message
+            details: error.message,
+            masked_url: maskedUrl,
+            api_version: API_VERSION
         }, { status: 500 });
     }
 }
