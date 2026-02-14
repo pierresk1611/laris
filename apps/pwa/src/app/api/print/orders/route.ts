@@ -49,13 +49,16 @@ export async function GET(request: Request) {
         const orderIds = allOrders.map(o => o.id.toString());
         // 3. Fetch Local States
         // We cast to any because localOrderState is a new model and the client might not be fully regenerated in the editor context
-        const localStates = await (prisma as any).localOrderState.findMany({
+        const localStates: any[] = await (prisma as any).localOrderState.findMany({
             where: {
                 orderId: { in: orderIds }
             }
         });
 
-        const stateMap = new Map(localStates.map(s => [`${s.shopId}-${s.orderId}`, s]));
+        const stateMap = new Map();
+        localStates.forEach((s: any) => {
+            stateMap.set(`${s.shopId}-${s.orderId}`, s);
+        });
 
         // 4. Transform and Filter
         const finalOrders = allOrders.map(order => {
@@ -65,7 +68,7 @@ export async function GET(request: Request) {
                 localStatus: localState?.status || 'PROCESSING', // Default to PROCESSING if no record
                 note: localState?.note || null
             };
-        }).filter(o => o.localStatus === 'READY_FOR_PRINT'); // ONLY show approved orders
+        }).filter(o => (o as any).localStatus === 'READY_FOR_PRINT'); // ONLY show approved orders
 
         // Optional: Filter by local status if requested
         // const statusFilter = searchParams.get('localStatus');
