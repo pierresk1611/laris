@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AutoDesign Cloud System v3.5",
+  title: "LARIS AUTOMAT",
   description: "Automatizácia personalizácie grafiky a tlačového vyraďovania",
 };
 
