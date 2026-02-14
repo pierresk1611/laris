@@ -28,7 +28,7 @@ export default function Sidebar() {
         <aside className="fixed left-0 top-0 h-screen w-[280px] bg-slate-900 flex flex-col text-slate-400">
             {/* Logo */}
             <div className="p-8 flex items-center gap-3">
-                <span className="text-2xl font-black text-white tracking-tighter">⚡ AutoDesign</span>
+                <span className="text-2xl font-black text-white tracking-tighter">⚡ LARIS</span>
             </div>
 
             {/* Navigation */}
@@ -41,8 +41,8 @@ export default function Sidebar() {
                             key={item.href}
                             href={item.href}
                             className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${isActive
-                                    ? "bg-white/10 text-white shadow-lg"
-                                    : "hover:bg-white/5 hover:text-white"
+                                ? "bg-white/10 text-white shadow-lg"
+                                : "hover:bg-white/5 hover:text-white"
                                 }`}
                         >
                             <Icon size={20} className={isActive ? "text-blue-500" : "group-hover:text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.3)]"} />
@@ -57,8 +57,8 @@ export default function Sidebar() {
                 <Link
                     href="/settings"
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${pathname === "/settings"
-                            ? "bg-white/10 text-white shadow-lg"
-                            : "hover:bg-white/5 hover:text-white"
+                        ? "bg-white/10 text-white shadow-lg"
+                        : "hover:bg-white/5 hover:text-white"
                         }`}
                 >
                     <Settings size={20} className={pathname === "/settings" ? "text-blue-500" : "group-hover:text-blue-400"} />
