@@ -12,7 +12,10 @@ import {
     Trash2,
     CheckCircle2,
     AlertCircle,
-    RotateCw
+    RotateCw,
+    FileText,
+    UploadCloud,
+    Loader2
 } from "lucide-react";
 
 interface Shop {
@@ -37,6 +40,7 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<string | null>(null);
     const [stats, setStats] = useState<any>(null);
+    const [uploading, setUploading] = useState(false);
 
     useEffect(() => {
         fetchSettings();
@@ -115,6 +119,30 @@ export default function SettingsPage() {
             alert(`CHYBA PRIPOJENIA k serveru (Ref: ${correlationId})\n\n${e.message}`);
         } finally {
             setSaving(null);
+        }
+    };
+
+    const handleImportCatalog = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files?.[0]) return;
+
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('file', e.target.files[0]);
+
+        try {
+            const res = await fetch('/api/catalog/import', { method: 'POST', body: formData });
+            const result = await res.json();
+            if (result.success) {
+                alert(result.message);
+                fetchSettings();
+            } else {
+                alert("Import zlyhal: " + result.message);
+            }
+        } catch (err) {
+            alert("Chyba spojenia.");
+        } finally {
+            setUploading(false);
+            e.target.value = ""; // Reset file input
         }
     };
 
@@ -611,6 +639,39 @@ export default function SettingsPage() {
                         >
                             Exportovať učiaci dataset (.json)
                         </button>
+                    </div>
+
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
+                        <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+                            <FileText size={24} className="text-green-500" />
+                            Katalóg Šablón (CSV)
+                        </h3>
+                        <p className="text-xs text-slate-500 mb-4 font-medium leading-relaxed">
+                            Nahrajte CSV export produktov. Systém automaticky spáruje produkty so šablónami podľa názvu a označí ich ako OVERENÉ.
+                        </p>
+                        <div className="relative">
+                            <input
+                                type="file"
+                                accept=".csv"
+                                onChange={handleImportCatalog}
+                                disabled={uploading}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            />
+                            <div className={`w-full py-6 border-2 border-dashed ${uploading ? 'border-slate-300 bg-slate-50' : 'border-green-200 bg-green-50/50 text-green-700 hover:bg-green-100'} rounded-xl text-center font-bold text-sm transition-all flex flex-col items-center justify-center gap-3`}>
+                                {uploading ? (
+                                    <>
+                                        <Loader2 className="animate-spin text-slate-400" size={24} />
+                                        <span className="text-slate-500">Analyzujem CSV a párujem...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <UploadCloud size={24} />
+                                        <span>Nahrať CSV Katalóg</span>
+                                        <span className="text-[10px] uppercase tracking-widest opacity-70">Kliknite alebo potiahnite súbor sem</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
