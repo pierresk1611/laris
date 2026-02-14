@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSetting } from '@/lib/settings';
 import { Dropbox } from 'dropbox';
 
-export async function POST() {
+export async function POST(req: Request) {
     console.log("[DropboxSync] STARTing template synchronization...");
     let folderPath = '/TEMPLATES';
 
