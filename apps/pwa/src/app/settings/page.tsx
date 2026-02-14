@@ -53,7 +53,10 @@ export default function SettingsPage() {
             if (data.success) {
                 setShops(data.shops || []);
                 setSettings(data.settings || []);
-                setStats({ patternCount: data.patternCount });
+                setStats({
+                    patternCount: data.patternCount,
+                    agentStatus: data.agentStatus
+                });
             }
         } catch (e) {
             console.error("Failed to fetch settings", e);
@@ -596,25 +599,34 @@ export default function SettingsPage() {
                     <div className="col-span-2">
                         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 sticky top-8">
                             <h3 className="text-xl font-black text-slate-900 mb-4">Agent Status</h3>
-                            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col items-center justify-center text-center space-y-3">
-                                <div className="h-16 w-16 bg-white rounded-2xl shadow-sm flex items-center justify-center">
-                                    <div className="h-4 w-4 rounded-full bg-green-500 animate-pulse" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-black text-slate-900">Agent Online</p>
-                                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Mac v Kancelárii</p>
-                                </div>
-                                <div className="w-full pt-4 space-y-2">
-                                    <div className="flex justify-between items-center text-[10px] font-bold">
-                                        <span className="text-slate-400 uppercase">Posledný ping:</span>
-                                        <span className="text-slate-900">Práve teraz</span>
+                            {(() => {
+                                const status = stats?.agentStatus;
+                                const lastSeen = status?.lastSeen ? new Date(status.lastSeen).getTime() : 0;
+                                const now = new Date().getTime();
+                                const isOnline = lastSeen > 0 && (now - lastSeen) < 60000; // 1 minute threshold
+
+                                return (
+                                    <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col items-center justify-center text-center space-y-3">
+                                        <div className="h-16 w-16 bg-white rounded-2xl shadow-sm flex items-center justify-center">
+                                            <div className={`h-4 w-4 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'} transition-colors duration-500`} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-black text-slate-900">{isOnline ? 'Agent Online' : 'Agent Offline'}</p>
+                                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">{status?.os || 'Unknown OS'}</p>
+                                        </div>
+                                        <div className="w-full pt-4 space-y-2">
+                                            <div className="flex justify-between items-center text-[10px] font-bold">
+                                                <span className="text-slate-400 uppercase">Posledný ping:</span>
+                                                <span className="text-slate-900">{status?.lastSeen ? new Date(status.lastSeen).toLocaleTimeString() : 'Nikdy'}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-[10px] font-bold">
+                                                <span className="text-slate-400 uppercase">Verzia:</span>
+                                                <span className="text-slate-900">{status?.version || '-'}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between items-center text-[10px] font-bold">
-                                        <span className="text-slate-400 uppercase">Verzia:</span>
-                                        <span className="text-slate-900">v3.5.0-cloud</span>
-                                    </div>
-                                </div>
-                            </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 </div>

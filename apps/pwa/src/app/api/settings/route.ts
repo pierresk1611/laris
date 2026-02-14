@@ -8,13 +8,14 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
     try {
         // @ts-ignore
-        const [settings, shops, patternCount] = await Promise.all([
+        const [settings, shops, patternCount, agentStatus] = await Promise.all([
             // @ts-ignore
             prisma.setting.findMany(),
             // @ts-ignore
             prisma.shop.findMany(),
             // @ts-ignore
-            prisma.aiPattern.count()
+            prisma.aiPattern.count(),
+            prisma.agentStatus.findFirst({ orderBy: { lastSeen: 'desc' } })
         ]);
 
         const REQUIRED_KEYS = [
@@ -61,7 +62,8 @@ export async function GET() {
             success: true,
             settings: finalSettings,
             shops: maskedShops,
-            patternCount
+            patternCount,
+            agentStatus
         });
     } catch (e: any) {
         return NextResponse.json({ success: false, error: e.message }, { status: 500 });
