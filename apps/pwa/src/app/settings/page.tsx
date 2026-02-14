@@ -33,6 +33,80 @@ interface Setting {
     isSecret: boolean;
 }
 
+function AgentStatusCard({ initialStatus }: { initialStatus: any }) {
+    const [status, setStatus] = useState(initialStatus);
+    const [now, setNow] = useState(Date.now());
+
+    useEffect(() => {
+        const fetchStatus = async () => {
+            try {
+                const res = await fetch('/api/agent/heartbeat');
+                const data = await res.json();
+                // Map API response to expected format if needed, or use directly
+                // API returns: { online: bool, lastSeen: date, version: string, os: string }
+                // DB format was: { lastSeen: date, version: string, os: string }
+                // Let's unify.
+                if (data.lastSeen) {
+                    setStatus({
+                        lastSeen: data.lastSeen,
+                        version: data.version,
+                        os: data.os
+                    });
+                }
+            } catch (e) {
+                console.error("Agent status poll failed", e);
+            }
+        };
+
+        const interval = setInterval(() => {
+            setNow(Date.now());
+            fetchStatus();
+        }, 5000); // Poll every 5s
+
+        return () => clearInterval(interval);
+    }, []);
+
+    const lastSeen = status?.lastSeen ? new Date(status.lastSeen).getTime() : 0;
+    const isOnline = lastSeen > 0 && (now - lastSeen) < 60000;
+
+    // Relative time helper
+    const getRelativeTime = (timestamp: number) => {
+        if (!timestamp) return 'Nikdy';
+        const seconds = Math.floor((now - timestamp) / 1000);
+        if (seconds < 5) return 'Práve teraz';
+        if (seconds < 60) return `pred ${seconds} sekundami`;
+        return new Date(timestamp).toLocaleTimeString();
+    };
+
+    return (
+        <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col items-center justify-center text-center space-y-3">
+            <div className="h-16 w-16 bg-white rounded-2xl shadow-sm flex items-center justify-center">
+                <div className={`h-4 w-4 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'} transition-colors duration-500`} />
+            </div>
+            <div>
+                <p className="text-sm font-black text-slate-900 transition-colors duration-300">
+                    {isOnline ? 'Agent Online' : 'Agent Offline'}
+                </p>
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">
+                    {status?.os || 'Unknown OS'}
+                </p>
+            </div>
+            <div className="w-full pt-4 space-y-2">
+                <div className="flex justify-between items-center text-[10px] font-bold">
+                    <span className="text-slate-400 uppercase">Posledný ping:</span>
+                    <span className="text-slate-900 font-mono">
+                        {getRelativeTime(lastSeen)}
+                    </span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-bold">
+                    <span className="text-slate-400 uppercase">Verzia:</span>
+                    <span className="text-slate-900">{status?.version || '-'}</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState<'shops' | 'api' | 'agent' | 'db'>('shops');
     const [shops, setShops] = useState<Shop[]>([]);
@@ -599,34 +673,7 @@ export default function SettingsPage() {
                     <div className="col-span-2">
                         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 sticky top-8">
                             <h3 className="text-xl font-black text-slate-900 mb-4">Agent Status</h3>
-                            {(() => {
-                                const status = stats?.agentStatus;
-                                const lastSeen = status?.lastSeen ? new Date(status.lastSeen).getTime() : 0;
-                                const now = new Date().getTime();
-                                const isOnline = lastSeen > 0 && (now - lastSeen) < 60000; // 1 minute threshold
-
-                                return (
-                                    <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col items-center justify-center text-center space-y-3">
-                                        <div className="h-16 w-16 bg-white rounded-2xl shadow-sm flex items-center justify-center">
-                                            <div className={`h-4 w-4 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'} transition-colors duration-500`} />
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-black text-slate-900">{isOnline ? 'Agent Online' : 'Agent Offline'}</p>
-                                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">{status?.os || 'Unknown OS'}</p>
-                                        </div>
-                                        <div className="w-full pt-4 space-y-2">
-                                            <div className="flex justify-between items-center text-[10px] font-bold">
-                                                <span className="text-slate-400 uppercase">Posledný ping:</span>
-                                                <span className="text-slate-900">{status?.lastSeen ? new Date(status.lastSeen).toLocaleTimeString() : 'Nikdy'}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-[10px] font-bold">
-                                                <span className="text-slate-400 uppercase">Verzia:</span>
-                                                <span className="text-slate-900">{status?.version || '-'}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
+                            <AgentStatusCard initialStatus={stats?.agentStatus} />
                         </div>
                     </div>
                 </div>
