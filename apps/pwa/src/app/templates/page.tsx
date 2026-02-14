@@ -97,7 +97,7 @@ export default function TemplatesPage() {
                     throw new Error(errorDetails);
                 }
 
-                const data: { success: boolean, hasMore: boolean, cursor: string | null, count: number } = await response.json();
+                const data: { success: boolean, hasMore: boolean, cursor: string | null, count: number, message?: string } = await response.json();
                 if (!data.success) throw new Error(data.message || 'Sync failed');
 
                 // Update state for next loop
