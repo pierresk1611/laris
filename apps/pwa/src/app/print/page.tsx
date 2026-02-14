@@ -26,6 +26,23 @@ export default function PrintManagerPage() {
     // Bulk Selection
     const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
 
+    // Group by Material
+    const materials = useMemo(() => {
+        const mats = new Set<string>();
+        orders.forEach(o => {
+            o.items.forEach(i => {
+                if (i.material) mats.add(i.material);
+                else mats.add("Neznámy papier");
+            });
+        });
+        return Array.from(mats).sort();
+    }, [orders]);
+
+    const filteredOrders = useMemo(() => {
+        if (selectedMaterial === "All") return orders;
+        return orders.filter(o => o.items.some(i => (i.material || "Neznámy papier") === selectedMaterial));
+    }, [orders, selectedMaterial]);
+
     const toggleOrder = (id: string, shopName: string) => {
         const key = `${shopName}-${id}`;
         const newSet = new Set(selectedOrders);
@@ -67,23 +84,6 @@ export default function PrintManagerPage() {
             setLoading(false);
         }
     };
-
-    // Group by Material
-    const materials = useMemo(() => {
-        const mats = new Set<string>();
-        orders.forEach(o => {
-            o.items.forEach(i => {
-                if (i.material) mats.add(i.material);
-                else mats.add("Neznámy papier");
-            });
-        });
-        return Array.from(mats).sort();
-    }, [orders]);
-
-    const filteredOrders = useMemo(() => {
-        if (selectedMaterial === "All") return orders;
-        return orders.filter(o => o.items.some(i => (i.material || "Neznámy papier") === selectedMaterial));
-    }, [orders, selectedMaterial]);
 
     // Calculate Imposition when orders change or settings change
     useEffect(() => {
