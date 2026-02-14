@@ -11,7 +11,11 @@ import {
     Type,
     ImageIcon,
     ScanSearch,
-    FileUp
+    ImageIcon,
+    ScanSearch,
+    FileUp,
+    CheckCircle2,
+    AlertTriangle
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, use } from "react";
@@ -84,6 +88,14 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                             Šablóna: {order.items?.[0]?.templateKey || 'Nezistená'} • Zdroj: {order.shopSource}
                         </p>
+                        {order.items?.[0]?.templateKey && (
+                            <div className={`mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border ${order.items[0].isVerified ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                {order.items[0].isVerified ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+                                <span>
+                                    {order.items[0].isVerified ? 'Overená šablóna (Katalóg)' : 'Neoverená šablóna (Chýba v katalógu)'}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </div>
 

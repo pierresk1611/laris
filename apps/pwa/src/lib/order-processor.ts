@@ -13,6 +13,7 @@ export interface ProcessedItem {
     options: Record<string, any>;
     rawMetaData: any[];
     downloads?: { label: string; url: string; name: string }[];
+    isVerified?: boolean;
 }
 
 export interface ProcessedOrder {
@@ -46,7 +47,10 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
             return [];
         });
 
-        const templateMap = new Map(templates.map((t: any) => [t.key?.toUpperCase() || "UNKNOWN", t.id]));
+        const templateMap = new Map(templates.map((t: any) => [
+            t.key?.toUpperCase() || "UNKNOWN",
+            { id: t.id, isVerified: t.isVerified }
+        ]));
 
         return rawOrders.map(order => {
             try {
@@ -57,7 +61,9 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                 const items = (order.line_items || []).map((item: any) => {
                     if (!item) return null;
                     const templateKey = extractTemplateKey(item.name || "");
-                    const templateId = templateKey ? templateMap.get(templateKey) || null : null;
+                    const templateInfo = templateKey ? templateMap.get(templateKey) : null;
+                    const templateId = templateInfo?.id || null;
+                    const isVerified = templateInfo?.isVerified || false;
                     const metaData = item.meta_data || [];
                     const epo = parseEPO(metaData);
 
@@ -72,7 +78,8 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         material: epo.material || null,
                         options: epo,
                         rawMetaData: metaData || [],
-                        downloads: (epo as any).downloads || []
+                        downloads: (epo as any).downloads || [],
+                        isVerified
                     };
                 }).filter((i: any) => i !== null);
 
