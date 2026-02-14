@@ -75,21 +75,21 @@ export default function TemplatesPage() {
 
         const syncPromise = async () => {
             let hasMore = true;
-            let cursor = null;
+            let cursor: string | null = null;
             let totalCount = 0;
             let batchCount = 0;
 
             while (hasMore) {
                 // Fetch batch
-                const res = await fetch('/api/templates/sync', {
+                const response = await fetch('/api/templates/sync', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cursor })
                 });
 
-                if (!res.ok) {
-                    const text = await res.text();
-                    let errorDetails = `Status ${res.status}`;
+                if (!response.ok) {
+                    const text = await response.text();
+                    let errorDetails = `Status ${response.status}`;
                     try {
                         const data = JSON.parse(text);
                         errorDetails = data.message || data.details || errorDetails;
@@ -97,7 +97,7 @@ export default function TemplatesPage() {
                     throw new Error(errorDetails);
                 }
 
-                const data = await res.json();
+                const data: { success: boolean, hasMore: boolean, cursor: string | null, count: number } = await response.json();
                 if (!data.success) throw new Error(data.message || 'Sync failed');
 
                 // Update state for next loop
