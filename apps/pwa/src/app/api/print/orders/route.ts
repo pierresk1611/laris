@@ -45,9 +45,6 @@ export async function GET(request: Request) {
         let allOrders: ProcessedOrder[] = results.flat();
 
         // 3. Fetch Local States
-        // We need to know which orders are explicitly MARKED as "READY_FOR_PRINT" 
-        // OR filtering out those that are already "PRINTED" if user wants pending only.
-
         // Let's get all local states for these remote orders
         const orderIds = allOrders.map(o => o.id.toString());
         const localStates = await prisma.localOrderState.findMany({
@@ -59,15 +56,14 @@ export async function GET(request: Request) {
         const stateMap = new Map(localStates.map(s => [`${s.shopId}-${s.orderId}`, s]));
 
         // 4. Transform and Filter
-        // We attach the local status to the remote order object
         const finalOrders = allOrders.map(order => {
             const localState = stateMap.get(`${order.shopId}-${order.id}`);
             return {
                 ...order,
-                localStatus: localState?.status || 'PROCESSING',
+                localStatus: localState?.status || 'PROCESSING', // Default to PROCESSING if no record
                 note: localState?.note || null
             };
-        });
+        }).filter(o => o.localStatus === 'READY_FOR_PRINT'); // ONLY show approved orders
 
         // Optional: Filter by local status if requested
         // const statusFilter = searchParams.get('localStatus');
