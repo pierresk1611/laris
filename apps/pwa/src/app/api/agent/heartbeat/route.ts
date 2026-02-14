@@ -2,6 +2,32 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSetting } from '@/lib/settings';
 
+// GET: Check Agent Status (for Frontend)
+export async function GET() {
+    try {
+        const status = await prisma.agentStatus.findFirst({
+            orderBy: { lastSeen: 'desc' }
+        });
+
+        if (!status) {
+            return NextResponse.json({ online: false, lastSeen: null });
+        }
+
+        const now = new Date().getTime();
+        const lastSeen = new Date(status.lastSeen).getTime();
+        const isOnline = (now - lastSeen) < 60000; // 1 minute threshold
+
+        return NextResponse.json({
+            online: isOnline,
+            lastSeen: status.lastSeen,
+            version: status.version,
+            os: status.os
+        });
+    } catch (error: any) {
+        return NextResponse.json({ online: false, error: error.message }, { status: 500 });
+    }
+}
+
 export async function POST(req: Request) {
     const authHeader = req.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -16,9 +42,6 @@ export async function POST(req: Request) {
 
     try {
         const body = await req.json();
-        // Upsert Agent Status
-        // We assume single agent for now, or identify by hostname?
-        // Let's use a fixed ID or hostname if available.
         const agentId = 'default-agent'; // Simple single agent setup
 
         await prisma.agentStatus.upsert({
