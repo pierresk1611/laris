@@ -74,27 +74,52 @@ export default function TemplatesPage() {
         setIsSyncing(true);
 
         const syncPromise = async () => {
-            const res = await fetch('/api/templates/sync', { method: 'POST' });
-            if (!res.ok) {
-                const text = await res.text();
-                let errorDetails = `Status ${res.status}`;
-                try {
-                    const data = JSON.parse(text);
-                    errorDetails = data.message || data.details || errorDetails;
-                } catch (e) { }
-                throw new Error(errorDetails);
+            let hasMore = true;
+            let cursor = null;
+            let totalCount = 0;
+            let batchCount = 0;
+
+            while (hasMore) {
+                // Fetch batch
+                const res = await fetch('/api/templates/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cursor })
+                });
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    let errorDetails = `Status ${res.status}`;
+                    try {
+                        const data = JSON.parse(text);
+                        errorDetails = data.message || data.details || errorDetails;
+                    } catch (e) { }
+                    throw new Error(errorDetails);
+                }
+
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'Sync failed');
+
+                // Update state for next loop
+                cursor = data.cursor;
+                hasMore = data.hasMore;
+                const currentCount = data.count || 0;
+                totalCount += currentCount;
+                batchCount++;
+
+                // Optional: Log progress (Toast updates are tricky in promise, so we rely on console or final msg)
+                console.log(`[SyncLoop] Batch ${batchCount} done. Added ${currentCount} templates. HasMore: ${hasMore}`);
             }
-            const data = await res.json();
-            if (!data.success) throw new Error(data.message || 'Sync failed');
-            return data;
+
+            return { message: `Synchronizácia dokončená. Spracovaných a aktualizovaných ${totalCount} šablón.` };
         };
 
         toast.promise(syncPromise(), {
-            loading: 'Pripájam sa k Dropboxu a hľadám šablóny...',
+            loading: 'Synchronizujem Dropbox (môže to chvíľu trvať)...',
             success: (data) => {
                 setIsSyncing(false);
                 fetchData();
-                return data.message || `Synchronizácia úspešná.`;
+                return data.message;
             },
             error: (err: any) => {
                 setIsSyncing(false);

@@ -44,39 +44,63 @@ export async function POST() {
             }, { status: 400 });
         }
 
-        // 3. Fetch ALL files with pagination + RECURSION
-        console.log(`[DropboxSync] Checkpoint 3: Listing folders recursively in ${folderPath}...`);
-        let response = await dbx.filesListFolder({
-            path: folderPath,
-            recursive: true
-        });
-        let entries = [...response.result.entries];
+        // 3. Fetch files with pagination (Client-driven loop)
+        const body = await req.json().catch(() => ({}));
+        const cursor = body.cursor;
 
-        while (response.result.has_more) {
-            console.log("[DropboxSync] Fetching next page of entries...");
-            response = await dbx.filesListFolderContinue({ cursor: response.result.cursor });
-            entries.push(...response.result.entries);
+        let response;
+
+        if (cursor) {
+            console.log("[DropboxSync] Continuing with cursor...");
+            response = await dbx.filesListFolderContinue({ cursor });
+        } else {
+            console.log(`[DropboxSync] Starting new recursive scan in ${folderPath}...`);
+            response = await dbx.filesListFolder({
+                path: folderPath,
+                recursive: true,
+                limit: 200 // Process 200 items per request to stay within Vercel timeout
+            });
         }
 
-        console.log("[DropboxSync] Checkpoint 3.b: All API responses received.");
+        const entries = response.result.entries;
+        console.log(`[DropboxSync] Fetched ${entries.length} entries. Has more: ${response.result.has_more}`);
 
-        const dropboxFolders = entries.filter(e => e['.tag'] === 'folder');
-        const folderNamesFull = dropboxFolders.map(f => f.name);
+        const TEMPLATE_CODE_REGEX = /\b([A-Z]{2,5}\d{2,4})\b/i; // Matches PNO16, KSO15, etc.
+
+        // Filter: We want folders AND files that look like template codes
+        const validTemplates = entries.filter(e => {
+            const name = e.name.toUpperCase();
+            // Remove extension for files
+            const nameWithoutExt = name.includes('.') ? name.split('.')[0] : name;
+
+            // Check if name contains a template code or IS a template code
+            // We want to be permissive: "PNO16" folder, or "PNO16.psd" file
+            return TEMPLATE_CODE_REGEX.test(nameWithoutExt);
+        });
+
+        const folderNamesFull = validTemplates.map(f => f.name);
         const sampleNames = folderNamesFull.slice(0, 10).join(', ');
 
-        console.log(`[DropboxSync] Checkpoint 3.c: Found total ${dropboxFolders.length} folders. Sample: ${sampleNames}`);
+        console.log(`[DropboxSync] Checkpoint 3.c: Found total ${validTemplates.length} templates. Sample: ${sampleNames}`);
 
         // 4. Upsert into database
         console.log("[DropboxSync] Checkpoint 4: Starting DB upserts...");
         let count = 0;
-        for (const folder of dropboxFolders) {
+        for (const entry of validTemplates) {
+            const name = entry.name;
+            const nameWithoutExt = name.includes('.') ? name.split('.')[0] : name;
+
+            // Extract strict code if possible, or use the name
+            const match = nameWithoutExt.match(TEMPLATE_CODE_REGEX);
+            const key = match ? match[0].toUpperCase() : nameWithoutExt.toUpperCase();
+
             // @ts-ignore
             await prisma.template.upsert({
-                where: { key: folder.name },
+                where: { key: key },
                 update: { status: 'ACTIVE' },
                 create: {
-                    key: folder.name,
-                    name: folder.name.replace(/_/g, ' '),
+                    key: key,
+                    name: nameWithoutExt.replace(/_/g, ' '),
                     status: 'ACTIVE'
                 }
             });
@@ -84,27 +108,30 @@ export async function POST() {
         }
         console.log(`[DropboxSync] Checkpoint 4.b: ${count} upserts done.`);
 
-        // 5. Store sync timestamp
-        console.log("[DropboxSync] Checkpoint 5: Updating last sync meta...");
-        // @ts-ignore
-        await prisma.setting.upsert({
-            where: { id: 'LAST_DROPBOX_SYNC' },
-            update: { value: new Date().toISOString(), category: 'SYSTEM' },
-            create: { id: 'LAST_DROPBOX_SYNC', value: new Date().toISOString(), category: 'SYSTEM' }
-        });
+        // ONLY Update timestamp if finished
+        if (!response.result.has_more) {
+            console.log("[DropboxSync] Sync finished. Updating timestamp.");
+            // @ts-ignore
+            await prisma.setting.upsert({
+                where: { id: 'LAST_DROPBOX_SYNC' },
+                update: { value: new Date().toISOString(), category: 'SYSTEM' },
+                create: { id: 'LAST_DROPBOX_SYNC', value: new Date().toISOString(), category: 'SYSTEM' }
+            });
 
-        // @ts-ignore
-        await prisma.setting.upsert({
-            where: { id: 'LAST_DROPBOX_SYNC_STATUS' },
-            update: { value: 'OK', category: 'SYSTEM' },
-            create: { id: 'LAST_DROPBOX_SYNC_STATUS', value: 'OK', category: 'SYSTEM' }
-        });
-        console.log("[DropboxSync] END: Synchronization successful.");
+            // @ts-ignore
+            await prisma.setting.upsert({
+                where: { id: 'LAST_DROPBOX_SYNC_STATUS' },
+                update: { value: 'OK', category: 'SYSTEM' },
+                create: { id: 'LAST_DROPBOX_SYNC_STATUS', value: 'OK', category: 'SYSTEM' }
+            });
+        }
 
         return NextResponse.json({
             success: true,
-            count,
-            message: `Nájdených ${count} šablón v "${folderPath}". Ukážka: ${sampleNames}${folderNamesFull.length > 10 ? '...' : ''}`
+            hasMore: response.result.has_more,
+            cursor: response.result.cursor,
+            count: count, // Count for THIS batch
+            message: `Spracovaných ${count} šablón (Batch).`
         });
 
     } catch (error: any) {
