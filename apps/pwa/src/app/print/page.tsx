@@ -187,6 +187,43 @@ export default function PrintManagerPage() {
                             </button>
                             <button
                                 disabled={!layout}
+                                onClick={async () => {
+                                    if (!layout) return;
+                                    if (!confirm(`Vytvoriť tlačový hárok pre ${layout.items.length} položiek?`)) return;
+
+                                    try {
+                                        const res = await fetch('/api/agent/jobs', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                type: 'MERGE_SHEET',
+                                                payload: {
+                                                    layout: layout,
+                                                    material: selectedMaterial,
+                                                    // We need to pass paths to PDFs. 
+                                                    // Ideally, orders have a reference to their generated PDF.
+                                                    // For now, we pass Order IDs and let Agent resolve paths.
+                                                    orders: ordersToImpose.map(o => ({
+                                                        id: o.id,
+                                                        shopName: o.shopName,
+                                                        number: o.number
+                                                        // TODO: Items might need specific PDF paths if multiple items per order
+                                                    }))
+                                                }
+                                            })
+                                        });
+                                        const data = await res.json();
+                                        if (data.success) {
+                                            alert(`Úloha pre Agent vytvorená (Job #${data.job.id})`);
+                                            // Optionally clear selection
+                                            setSelectedOrders(new Set());
+                                        } else {
+                                            alert("Chyba: " + data.message);
+                                        }
+                                    } catch (e) {
+                                        alert("Chyba spojenia");
+                                    }
+                                }}
                                 className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200 transition-all"
                             >
                                 Vytvoriť tlačový hárok (Agent)

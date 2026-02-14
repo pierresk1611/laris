@@ -66,3 +66,28 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
+
+// POST: Create a new job (from Client)
+export async function POST(req: Request) {
+    try {
+        const body = await req.json();
+        const { type, payload } = body;
+
+        if (!type || !payload) {
+            return NextResponse.json({ success: false, message: 'Missing type or payload' }, { status: 400 });
+        }
+
+        const job = await prisma.job.create({
+            data: {
+                type,
+                status: 'PENDING',
+                payload: payload // JSON
+            }
+        });
+
+        return NextResponse.json({ success: true, job });
+    } catch (error: any) {
+        console.error("Create Job Error:", error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+}
