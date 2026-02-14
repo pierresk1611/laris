@@ -2,7 +2,7 @@
 
 import AppHeader from "@/components/AppHeader";
 import { useState, useEffect, useMemo } from "react";
-import { Printer, Layers, FileCheck, AlertCircle, RefreshCw, Grid as GridIcon } from "lucide-react";
+import { Printer, Layers, FileCheck, AlertCircle, RefreshCw, Grid as GridIcon, Settings2 } from "lucide-react";
 import { calculateImposition, PAPER_SIZES, SheetLayout } from "@/lib/imposition";
 
 interface PrintOrder {
@@ -10,8 +10,12 @@ interface PrintOrder {
     number: string;
     items: any[];
     localStatus: 'PROCESSING' | 'READY_FOR_PRINT' | 'PRINTED';
+    sheetFormat: string; // SRA3, A4, etc.
     shopName: string;
+    shopId: string; // Needed for update API
 }
+
+const AVAILABLE_FORMATS = ["SRA3", "A4", "A3", "METAL_225_300", "Vlastný"];
 
 export default function PrintManagerPage() {
     const [orders, setOrders] = useState<PrintOrder[]>([]);
@@ -19,12 +23,47 @@ export default function PrintManagerPage() {
     const [selectedMaterial, setSelectedMaterial] = useState<string>("All");
     const [layout, setLayout] = useState<SheetLayout | null>(null);
 
-    // Imposition Settings
+    // Imposition Settings (Driven by Group selection)
     const [canvasSize, setCanvasSize] = useState(PAPER_SIZES.SRA3);
     const [itemSize, setItemSize] = useState({ width: 105, height: 148 }); // A6 default
 
     // Bulk Selection
     const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        fetchOrders();
+    }, []);
+
+    const fetchOrders = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/print/orders');
+            const data = await res.json();
+            if (data.success) {
+                setOrders(data.orders);
+            }
+        } catch (e) {
+            console.error("Failed to load print orders", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const updateOrderFormat = async (orderId: string, shopId: string, format: string) => {
+        // Optimistic update
+        setOrders(prev => prev.map(o => o.id === orderId && o.shopId === shopId ? { ...o, sheetFormat: format } : o));
+
+        try {
+            await fetch(`/api/orders/${orderId}/format`, {
+                method: 'POST', // or PATCH
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shopId, sheetFormat: format })
+            });
+        } catch (e) {
+            console.error("Failed to save format", e);
+            fetchOrders(); // Revert on error
+        }
+    };
 
     // Group by Material
     const materials = useMemo(() => {
@@ -66,38 +105,42 @@ export default function PrintManagerPage() {
         return filteredOrders.filter(o => selectedOrders.has(`${o.shopName}-${o.id}`));
     }, [filteredOrders, selectedOrders]);
 
-    useEffect(() => {
-        fetchOrders();
-    }, []);
+    // Determine Logic State for Button & Layout
+    const impositionState = useMemo(() => {
+        if (ordersToImpose.length === 0) return { valid: false, message: "Vyberte objednávky" };
 
-    const fetchOrders = async () => {
-        setLoading(true);
-        try {
-            const res = await fetch('/api/print/orders');
-            const data = await res.json();
-            if (data.success) {
-                setOrders(data.orders);
-            }
-        } catch (e) {
-            console.error("Failed to load print orders", e);
-        } finally {
-            setLoading(false);
-        }
-    };
+        // Grouping Constraint: All selected logic must have SAME format for simple batching?
+        // Or we just take the first one?
+        // Requirement: "System must group automatically".
+        // If user manually selects Mixed formats, we should probably warn or disable.
 
-    // Calculate Imposition when orders change or settings change
+        const firstFormat = ordersToImpose[0].sheetFormat;
+        const uniform = ordersToImpose.every(o => o.sheetFormat === firstFormat);
+
+        if (!uniform) return { valid: false, message: "Vybrané objednávky majú rôzne formáty hárku!" };
+        return { valid: true, format: firstFormat };
+
+    }, [ordersToImpose]);
+
+    // Recalculate Layout
     useEffect(() => {
-        const totalItems = filteredOrders.reduce((sum, o) => {
+        const totalItems = ordersToImpose.reduce((sum, o) => {
             return sum + o.items.reduce((s, i) => s + i.quantity, 0);
         }, 0);
 
-        if (totalItems > 0) {
-            const calculated = calculateImposition(canvasSize, itemSize, totalItems);
+        if (totalItems > 0 && impositionState.valid && impositionState.format) {
+            // Map format string to Dimensions
+            let size = PAPER_SIZES.SRA3;
+            if (impositionState.format === "A4") size = PAPER_SIZES.A4;
+            if (impositionState.format === "A3") size = PAPER_SIZES.A3;
+            // Metal custom? TODO
+
+            const calculated = calculateImposition(size, itemSize, totalItems);
             setLayout(calculated);
         } else {
             setLayout(null);
         }
-    }, [filteredOrders, canvasSize, itemSize]);
+    }, [ordersToImpose, impositionState]);
 
 
     return (
@@ -163,19 +206,7 @@ export default function PrintManagerPage() {
                                 <Printer size={20} />
                                 {selectedMaterial}
                             </h2>
-                            {layout && (
-                                <>
-                                    <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold">
-                                        Vybrané: {ordersToImpose.length} obj.
-                                    </span>
-                                    <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-500">
-                                        {layout.itemsPerSheet} ks / hárok
-                                    </span>
-                                    <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-500">
-                                        Celkom {layout.totalSheets} hárkov
-                                    </span>
-                                </>
-                            )}
+                            {itemsPerSheetDetails(layout, ordersToImpose)}
                         </div>
                         <div className="flex gap-2">
                             <button
@@ -186,47 +217,16 @@ export default function PrintManagerPage() {
                                 <RefreshCw size={20} />
                             </button>
                             <button
-                                disabled={!layout}
+                                disabled={!impositionState.valid}
                                 onClick={async () => {
-                                    if (!layout) return;
-                                    if (!confirm(`Vytvoriť tlačový hárok pre ${layout.items.length} položiek?`)) return;
+                                    if (!layout || !impositionState.valid) return;
+                                    if (!confirm(`Vytvoriť tlačový hárok (${impositionState.format}) pre ${ordersToImpose.length} objednávok?`)) return;
 
-                                    try {
-                                        const res = await fetch('/api/agent/jobs', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({
-                                                type: 'MERGE_SHEET',
-                                                payload: {
-                                                    layout: layout,
-                                                    material: selectedMaterial,
-                                                    // We need to pass paths to PDFs. 
-                                                    // Ideally, orders have a reference to their generated PDF.
-                                                    // For now, we pass Order IDs and let Agent resolve paths.
-                                                    orders: ordersToImpose.map(o => ({
-                                                        id: o.id,
-                                                        shopName: o.shopName,
-                                                        number: o.number
-                                                        // TODO: Items might need specific PDF paths if multiple items per order
-                                                    }))
-                                                }
-                                            })
-                                        });
-                                        const data = await res.json();
-                                        if (data.success) {
-                                            alert(`Úloha pre Agent vytvorená (Job #${data.job.id})`);
-                                            // Optionally clear selection
-                                            setSelectedOrders(new Set());
-                                        } else {
-                                            alert("Chyba: " + data.message);
-                                        }
-                                    } catch (e) {
-                                        alert("Chyba spojenia");
-                                    }
+                                    createAgentJob(layout, selectedMaterial, ordersToImpose, impositionState.format!);
                                 }}
                                 className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200 transition-all"
                             >
-                                Vytvoriť tlačový hárok (Agent)
+                                {impositionState.valid ? `Vytvoriť hárok (${impositionState.format})` : impositionState.message}
                             </button>
                         </div>
                     </div>
@@ -249,27 +249,49 @@ export default function PrintManagerPage() {
                                     return (
                                         <div
                                             key={key}
-                                            onClick={() => toggleOrder(order.id, order.shopName)}
-                                            className={`p-3 border rounded-2xl transition-colors flex justify-between items-center cursor-pointer select-none group ${isSelected ? 'bg-blue-50 border-blue-200' : 'border-slate-100 hover:bg-slate-50'
+                                            className={`p-3 border rounded-2xl transition-all select-none group ${isSelected ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 'border-slate-100 hover:bg-slate-50'
                                                 }`}
                                         >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300 bg-white'
-                                                    }`}>
-                                                    {isSelected && <FileCheck size={12} className="text-white" />}
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-black text-slate-900">#{order.number}</span>
-                                                        <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold">{order.shopName}</span>
+                                            <div className="flex justify-between items-center">
+                                                <div
+                                                    onClick={() => toggleOrder(order.id, order.shopName)}
+                                                    className="flex items-center gap-3 cursor-pointer flex-1"
+                                                >
+                                                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300 bg-white'
+                                                        }`}>
+                                                        {isSelected && <FileCheck size={12} className="text-white" />}
                                                     </div>
-                                                    <div className="text-xs text-slate-400 mt-1">
-                                                        {order.items[0]?.name?.substring(0, 30)}...
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-black text-slate-900">#{order.number}</span>
+                                                            <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold">{order.shopName}</span>
+                                                        </div>
+                                                        <div className="text-xs text-slate-400 mt-1">
+                                                            {order.items[0]?.name?.substring(0, 30)}...
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="block font-black text-slate-900 text-lg">{totalQty} <span className="text-[10px] text-slate-400 uppercase">ks</span></span>
+
+                                                <div className="flex items-center gap-4">
+                                                    {/* Format Dropdown */}
+                                                    <div className="flex flex-col items-end">
+                                                        <label className="text-[9px] font-bold text-slate-300 uppercase mb-0.5">Formát hárku</label>
+                                                        <select
+                                                            value={order.sheetFormat || "SRA3"}
+                                                            onChange={(e) => updateOrderFormat(order.id, order.shopId, e.target.value)}
+                                                            onClick={(e) => e.stopPropagation()} // Prevent row toggle
+                                                            className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none text-slate-700"
+                                                        >
+                                                            {AVAILABLE_FORMATS.map(f => (
+                                                                <option key={f} value={f}>{f}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+
+                                                    <div className="text-right min-w-[60px]">
+                                                        <span className="block font-black text-slate-900 text-lg">{totalQty} <span className="text-[10px] text-slate-400 uppercase">ks</span></span>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     )
@@ -288,17 +310,19 @@ export default function PrintManagerPage() {
                             <div className="bg-slate-800 rounded-3xl border border-slate-700 p-8 flex flex-col items-center justify-center relative overflow-hidden min-h-[400px]">
                                 <div className="absolute top-4 left-4 text-white/50 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
                                     <GridIcon size={14} />
-                                    SRA3 Preview ({layout?.sheetWidth}x{layout?.sheetHeight}mm)
+                                    {impositionState.valid ?
+                                        `Preview: ${impositionState.format} (${layout?.sheetWidth}x${layout?.sheetHeight}mm)`
+                                        : 'Preview nedostupný'}
                                 </div>
 
                                 {/* Canvas Renderer */}
-                                {layout && (
+                                {layout && impositionState.valid && (
                                     <div
                                         className="bg-white shadow-2xl relative transition-all duration-500 origin-center"
                                         style={{
                                             width: `${layout.sheetWidth}px`,
                                             height: `${layout.sheetHeight}px`,
-                                            transform: 'scale(0.65)', // Scale down further to fit UI
+                                            transform: 'scale(0.5)', // Adjusted scale for bigger sheets
                                         }}
                                     >
                                         {/* Render Items */}
@@ -319,11 +343,13 @@ export default function PrintManagerPage() {
                                     </div>
                                 )}
 
-                                {!layout && (
+                                {(!layout || !impositionState.valid) && (
                                     <div className="text-white/30 text-center">
                                         <GridIcon size={48} className="mx-auto mb-4" />
-                                        <p>Vyberte objednávky v zozname (kliknutím)</p>
-                                        <p className="text-xs mt-2 opacity-50">Náhľad sa aktualizuje automaticky</p>
+                                        <p>{impositionState.message || "Vyberte objednávky v zozname"}</p>
+                                        {!impositionState.valid && selectedOrders.size > 0 && (
+                                            <p className="text-xs mt-2 text-red-400 font-bold">Tip: Zvoľte rovnaký formát pre všetky vybrané položky.</p>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -333,4 +359,53 @@ export default function PrintManagerPage() {
             </div>
         </main>
     );
+
+    // Helpers
+    function itemsPerSheetDetails(l: SheetLayout | null, selected: any[]) {
+        if (!l) return null;
+        return (
+            <>
+                <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold">
+                    Vybrané: {selected.length} obj.
+                </span>
+                <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-500">
+                    {l.itemsPerSheet} ks / hárok
+                </span>
+                <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-bold text-slate-500">
+                    Celkom {l.totalSheets} hárkov
+                </span>
+            </>
+        );
+    }
+
+    async function createAgentJob(l: SheetLayout, mat: string, orders: any[], fmt: string) {
+        try {
+            const res = await fetch('/api/agent/jobs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'MERGE_SHEET',
+                    payload: {
+                        layout: l,
+                        material: mat,
+                        sheetFormat: fmt,
+                        orders: orders.map(o => ({
+                            id: o.id,
+                            shopName: o.shopName,
+                            number: o.number
+                        }))
+                    }
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert(`Úloha pre Agent vytvorená (Job #${data.job.id})`);
+                setSelectedOrders(new Set());
+            } else {
+                alert("Chyba: " + data.message);
+            }
+        } catch (e) {
+            alert("Chyba spojenia");
+        }
+    }
 }
