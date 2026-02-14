@@ -96,11 +96,47 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                         )}
                     </div>
                 </div>
-
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4"> {/* Added wrapper div for buttons */}
                     <button className="flex items-center gap-2 px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors">
                         <Trash2 size={16} />
                         <span>Zrušiť</span>
+                    </button>
+                    {/* Print Approval Button */}
+                    <button
+                        onClick={async () => {
+                            if (!confirm("Naozaj schváliť túto objednávku do tlače?")) return;
+                            try {
+                                const res = await fetch(`/api/orders/${order.id}/status`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        status: 'READY_FOR_PRINT',
+                                        shopId: order.shopId
+                                    })
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                    alert("Objednávka bola schválená do tlače ✅");
+                                    // Refresh logic or redirect could be added here
+                                    window.location.reload();
+                                } else {
+                                    alert("Chyba: " + data.message);
+                                }
+                            } catch (e) {
+                                alert("Chyba spojenia");
+                            }
+                        }}
+                        className={`flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                            // Condition: Check if PDF exists (TODO: connect to Agent Job result)
+                            // For now, always enabled for testing logic
+                            true
+                                ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200'
+                                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            }`}
+                    // disabled={!pdfReady}
+                    >
+                        <CheckCircle2 size={16} />
+                        <span>Schváliť do Tlače</span>
                     </button>
                     <button className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-shadow shadow-sm shadow-blue-200">
                         <Save size={16} />
@@ -406,6 +442,6 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
