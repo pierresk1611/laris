@@ -28,8 +28,21 @@ model Template {
   mappedPaths  Int      @default(0)
   mappingData  Json?    // Stores the PSD layer to field mappings
   status       String   @default("ACTIVE")
+  isVerified   Boolean  @default(false)
+  imageUrl     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model VerifiedTemplate {
+  id            String   @id @default(cuid())
+  internal_id   String?
+  title         String
+  template_code String   @unique
+  category      String?
+  image_url     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Job {
