@@ -23,6 +23,32 @@ export default function PrintManagerPage() {
     const [canvasSize, setCanvasSize] = useState(PAPER_SIZES.SRA3);
     const [itemSize, setItemSize] = useState({ width: 105, height: 148 }); // A6 default
 
+    // Bulk Selection
+    const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+
+    const toggleOrder = (id: string, shopName: string) => {
+        const key = `${shopName}-${id}`;
+        const newSet = new Set(selectedOrders);
+        if (newSet.has(key)) newSet.delete(key);
+        else newSet.add(key);
+        setSelectedOrders(newSet);
+    };
+
+    const toggleAll = () => {
+        if (selectedOrders.size === filteredOrders.length) {
+            setSelectedOrders(new Set());
+        } else {
+            const newSet = new Set<string>();
+            filteredOrders.forEach(o => newSet.add(`${o.shopName}-${o.id}`));
+            setSelectedOrders(newSet);
+        }
+    };
+
+    // Calculate Imposition based on SELECTED orders ONLY
+    const ordersToImpose = useMemo(() => {
+        return filteredOrders.filter(o => selectedOrders.has(`${o.shopName}-${o.id}`));
+    }, [filteredOrders, selectedOrders]);
+
     useEffect(() => {
         fetchOrders();
     }, []);

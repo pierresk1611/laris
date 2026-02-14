@@ -47,7 +47,9 @@ export async function GET(request: Request) {
         // 3. Fetch Local States
         // Let's get all local states for these remote orders
         const orderIds = allOrders.map(o => o.id.toString());
-        const localStates = await prisma.localOrderState.findMany({
+        // 3. Fetch Local States
+        // We cast to any because localOrderState is a new model and the client might not be fully regenerated in the editor context
+        const localStates = await (prisma as any).localOrderState.findMany({
             where: {
                 orderId: { in: orderIds }
             }
