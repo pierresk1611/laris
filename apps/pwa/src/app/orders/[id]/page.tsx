@@ -11,8 +11,6 @@ import {
     Type,
     ImageIcon,
     ScanSearch,
-    ImageIcon,
-    ScanSearch,
     FileUp,
     CheckCircle2,
     AlertTriangle
