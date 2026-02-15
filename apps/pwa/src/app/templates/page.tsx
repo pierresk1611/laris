@@ -242,12 +242,21 @@ export default function TemplatesPage() {
                                             <FolderOpen size={14} className="text-slate-400" />
                                             <span className="text-[10px] font-bold text-slate-500">{template.mappedPaths} polí</span>
                                         </div>
-                                        <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${template.status === 'ACTIVE'
-                                            ? 'bg-slate-100 text-slate-600'
-                                            : 'bg-red-50 text-red-600'
-                                            }`}>
-                                            {template.status === 'ACTIVE' ? 'Aktívna' : 'Chyba'}
-                                        </span>
+                                        {template.status === 'ACTIVE' && (
+                                            <span className="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-600">
+                                                Aktívna
+                                            </span>
+                                        )}
+                                        {template.status === 'UNMAPPED' && (
+                                            <span className="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest bg-yellow-50 text-yellow-600 border border-yellow-100">
+                                                Nemapovaná
+                                            </span>
+                                        )}
+                                        {template.status !== 'ACTIVE' && template.status !== 'UNMAPPED' && (
+                                            <span className="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest bg-red-50 text-red-600">
+                                                Chyba
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             </div>

@@ -80,48 +80,64 @@ export async function POST(req: Request) {
         const entries = response.result.entries;
         console.log(`[DropboxSync] Fetched ${entries.length} entries. Has more: ${response.result.has_more}`);
 
-        const TEMPLATE_CODE_REGEX = /\b([A-Z]{2,5}\d{2,4})\b/i; // Matches PNO16, KSO15, etc.
+        // 3. Greedy Filter: We want ALL .psd and .ai files
+        const VALID_EXTENSIONS = ['.psd', '.ai'];
 
-        // Filter: We want folders AND files that look like template codes
         const validTemplates = entries.filter(e => {
-            const name = e.name.toUpperCase();
-            // Remove extension for files
-            const nameWithoutExt = name.includes('.') ? name.split('.')[0] : name;
-
-            // Check if name contains a template code or IS a template code
-            // We want to be permissive: "PNO16" folder, or "PNO16.psd" file
-            return TEMPLATE_CODE_REGEX.test(nameWithoutExt);
+            const name = e.name.toLowerCase();
+            // Check if it's a file with valid extension
+            if (e['.tag'] === 'file') {
+                return VALID_EXTENSIONS.some(ext => name.endsWith(ext));
+            }
+            // Or if it's a folder (we assume folders might contain templates, but for greedy import we focus on files)
+            // For now, let's keep folders if they look like templates, but primary focus is files
+            return true;
         });
 
-        const folderNamesFull = validTemplates.map(f => f.name);
-        const sampleNames = folderNamesFull.slice(0, 10).join(', ');
-
-        console.log(`[DropboxSync] Checkpoint 3.c: Found total ${validTemplates.length} templates. Sample: ${sampleNames}`);
+        console.log(`[DropboxSync] Checkpoint 3.c: Found ${validTemplates.length} potential items.`);
 
         // 4. Upsert into database
         console.log("[DropboxSync] Checkpoint 4: Starting DB upserts...");
         let count = 0;
+
         for (const entry of validTemplates) {
+            // Skip folders for now in this greedy pass, we only want actual files to map
+            if (entry['.tag'] !== 'file') continue;
+
             const name = entry.name;
-            const nameWithoutExt = name.includes('.') ? name.split('.')[0] : name;
+            const nameWithoutExt = name.substring(0, name.lastIndexOf('.'));
+            const ext = name.substring(name.lastIndexOf('.')); // .psd or .ai
 
-            // Extract strict code if possible, or use the name
-            const match = nameWithoutExt.match(TEMPLATE_CODE_REGEX);
-            const key = match ? match[0].toUpperCase() : nameWithoutExt.toUpperCase();
+            // Key is the filename (e.g. "pozvanka_2025_77")
+            // We sanitize it a bit to be safe
+            const key = nameWithoutExt.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
 
-            // @ts-ignore
-            await prisma.template.upsert({
-                where: { key: key },
-                update: { status: 'ACTIVE' },
-                create: {
-                    key: key,
-                    name: nameWithoutExt.replace(/_/g, ' '),
-                    status: 'ACTIVE'
-                }
-            });
-            count++;
+            // Status: UNMAPPED by default for these greedy imports
+            // If it already exists and is ACTIVE, we don't overwrite status to UNMAPPED
+            // But we do create new ones as UNMAPPED
+
+            const existing = await prisma.template.findUnique({ where: { key } });
+
+            if (!existing) {
+                // Create new UNMAPPED template
+                // @ts-ignore
+                await prisma.template.create({
+                    data: {
+                        key: key,
+                        name: nameWithoutExt.replace(/_/g, ' '),
+                        status: 'UNMAPPED',
+                        isVerified: false
+                    }
+                });
+                count++;
+            } else {
+                // If exists, just ensure it's not deleted? 
+                // User didn't specify update logic, but generally we shouldn't overwrite manual changes.
+                // We'll just log it.
+                // console.log(`[DropboxSync] Template ${key} already exists.`);
+            }
         }
-        console.log(`[DropboxSync] Checkpoint 4.b: ${count} upserts done.`);
+        console.log(`[DropboxSync] Checkpoint 4.b: ${count} NEW templates created.`);
 
         // ONLY Update timestamp if finished
         if (!response.result.has_more) {
