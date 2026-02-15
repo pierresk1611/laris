@@ -58,6 +58,9 @@ export async function POST(req: Request) {
         const body = await req.json().catch(() => ({}));
         const cursor = body.cursor;
 
+        // Initialize Progress immediately
+        await updateProgress('SYNC_PROGRESS', 0, 0, 'Otváram spojenie s Dropboxom...');
+
         let response;
 
         try {
