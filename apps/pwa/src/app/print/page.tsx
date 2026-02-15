@@ -312,7 +312,7 @@ return (
                                                         <select
                                                             value={order.sheetFormat || "SRA3"}
                                                             onChange={(e) => updateOrderFormat(order.id, order.shopId, e.target.value)}
-                                                            onClick={(e) => e.stopPropagation()} // Prevent row toggle
+                                                            onClick={(e) => e.stopPropagation()}
                                                             className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none text-slate-700"
                                                         >
                                                             {formatKeys.map(f => (
