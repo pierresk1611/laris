@@ -15,7 +15,6 @@ import {
     RotateCw,
     FileText,
     UploadCloud,
-    UploadCloud,
     Loader2,
     Printer
 } from "lucide-react";

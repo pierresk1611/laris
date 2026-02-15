@@ -334,7 +334,8 @@ return (
                                             </div>
                                         </div>
                                         )
-                            })}
+                                })}
+
                                         {filteredOrders.length === 0 && (
                                             <div className="text-center py-12 text-slate-400">
                                                 <AlertCircle size={32} className="mx-auto mb-2 opacity-20" />
