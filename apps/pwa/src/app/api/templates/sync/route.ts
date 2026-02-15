@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSetting } from '@/lib/settings';
+import { getSetting, updateProgress } from '@/lib/settings';
 import { Dropbox } from 'dropbox';
 
 export async function POST(req: Request) {
@@ -131,7 +131,15 @@ export async function POST(req: Request) {
                         // prediction defaults to null
                     }
                 });
-                newInboxItems++;
+                // Update Progress every 10 items to avoid DB spam
+                if (count % 10 === 0) {
+                    await updateProgress('SYNC_PROGRESS', count, 0, `Spracovávam súbory... (${count})`);
+                }
+                // Update Progress every 10 items to avoid DB spam
+                if (count % 10 === 0) {
+                    await updateProgress('SYNC_PROGRESS', count, 0, `Spracovávam súbory... (${count})`);
+                }
+
             }
             count++;
         }

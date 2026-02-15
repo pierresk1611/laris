@@ -21,6 +21,7 @@ import {
     ArrowRight
 } from "lucide-react";
 import { toast } from "sonner";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 interface Template {
     key: string;
@@ -98,9 +99,31 @@ export default function TemplatesPage() {
         }
     }, []);
 
+    const [syncProgress, setSyncProgress] = useState<{ percentage: number, label: string } | null>(null);
+    const [aiProgress, setAiProgress] = useState<{ percentage: number, label: string } | null>(null);
+
     useEffect(() => {
         fetchData();
-    }, [fetchData]);
+
+        // Polling for progress
+        const interval = setInterval(async () => {
+            if (!isSyncing && !isAnalyzing) return; // Only poll if active
+
+            try {
+                const res = await fetch('/api/progress');
+                const data = await res.json();
+
+                if (data.success) {
+                    if (data.sync) setSyncProgress(data.sync);
+                    if (data.ai) setAiProgress(data.ai);
+                }
+            } catch (e) {
+                console.error("Progress poll failed", e);
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [fetchData, isSyncing, isAnalyzing]);
 
     const handleDropboxSync = async () => {
         setIsSyncing(true);
@@ -235,6 +258,15 @@ export default function TemplatesPage() {
                         {lastSync ? new Date(lastSync.date).toLocaleString('sk-SK') : 'Nikdy'}
                     </span>
                 </div>
+                {aiProgress && (
+                    <div className="flex-1 max-w-xs mx-4">
+                        <ProgressBar
+                            progress={aiProgress.percentage}
+                            label={aiProgress.label}
+                            colorClass="bg-purple-600"
+                        />
+                    </div>
+                )}
                 <div className="h-4 w-[1px] bg-slate-100" />
                 <div className="flex items-center gap-2">
                     {lastSync?.status === 'OK' ? (
@@ -323,14 +355,24 @@ export default function TemplatesPage() {
                         </>
                     )}
 
-                    <button
-                        onClick={handleDropboxSync}
-                        disabled={isSyncing}
-                        className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-sm font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 ${isSyncing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                        {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-                        <span>{isSyncing ? 'Skenovať Dropbox' : 'Skenovať Dropbox'}</span>
-                    </button>
+                    <div className="flex flex-col w-full md:w-auto gap-2">
+                        <button
+                            onClick={handleDropboxSync}
+                            disabled={isSyncing}
+                            className={`flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-sm font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 ${isSyncing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                            {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                            <span>{isSyncing ? 'Skenujem...' : 'Skenovať Dropbox'}</span>
+                        </button>
+                        {isSyncing && syncProgress && (
+                            <ProgressBar
+                                progress={syncProgress.percentage}
+                                label={syncProgress.label}
+                                className="w-full md:w-48"
+                                showPercentage={false}
+                            />
+                        )}
+                    </div>
                 </div>
             </div>
 

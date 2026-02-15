@@ -37,3 +37,25 @@ export async function getSettingsByCategory(category: string) {
         isSecret: s.isSecret
     }));
 }
+
+/**
+ * Updates a progress setting.
+ * Since this is ephemeral, we don't need encryption.
+ */
+export async function updateProgress(key: string, current: number, total: number, label: string) {
+    const value = JSON.stringify({
+        percentage: total === 0 ? 0 : Math.round((current / total) * 100),
+        current,
+        total,
+        label,
+        updatedAt: new Date().toISOString()
+    });
+
+    // Upsert the setting
+    // @ts-ignore
+    await prisma.setting.upsert({
+        where: { id: key },
+        update: { value, category: 'EPHEMERAL' },
+        create: { id: key, value, category: 'EPHEMERAL', isSecret: false }
+    });
+}
