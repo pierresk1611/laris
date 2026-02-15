@@ -10,13 +10,23 @@ export async function POST(req: Request) {
     try {
         // 1. Fetch credentials
         console.log("[DropboxSync] Checkpoint 1: Fetching settings...");
-        const refreshToken = await getSetting('DROPBOX_REFRESH_TOKEN');
-        const clientId = await getSetting('DROPBOX_APP_KEY');
-        const clientSecret = await getSetting('DROPBOX_APP_SECRET');
-        const accessToken = await getSetting('DROPBOX_ACCESS_TOKEN');
-        const customPath = await getSetting('DROPBOX_FOLDER_PATH');
+        const refreshTokenRaw = await getSetting('DROPBOX_REFRESH_TOKEN');
+        const clientIdRaw = await getSetting('DROPBOX_APP_KEY');
+        const clientSecretRaw = await getSetting('DROPBOX_APP_SECRET');
+        const accessTokenRaw = await getSetting('DROPBOX_ACCESS_TOKEN');
+        const customPathRaw = await getSetting('DROPBOX_FOLDER_PATH');
 
-        folderPath = customPath?.trim() ? (customPath.trim().startsWith('/') ? customPath.trim() : `/${customPath.trim()}`) : '/TEMPLATES';
+        const refreshToken = refreshTokenRaw?.trim();
+        const clientId = clientIdRaw?.trim();
+        const clientSecret = clientSecretRaw?.trim();
+        const accessToken = accessTokenRaw?.trim();
+
+        let customPath = customPathRaw?.trim() || '/TEMPLATES';
+        if (!customPath.startsWith('/')) {
+            customPath = '/' + customPath;
+        }
+        folderPath = customPath;
+
         console.log("[DropboxSync] Checkpoint 1.b: Settings loaded.", { folderPath, hasAccess: !!accessToken, hasRefresh: !!refreshToken });
 
         let dbx;
@@ -50,16 +60,21 @@ export async function POST(req: Request) {
 
         let response;
 
-        if (cursor) {
-            console.log("[DropboxSync] Continuing with cursor...");
-            response = await dbx.filesListFolderContinue({ cursor });
-        } else {
-            console.log(`[DropboxSync] Starting new recursive scan in ${folderPath}...`);
-            response = await dbx.filesListFolder({
-                path: folderPath,
-                recursive: true,
-                limit: 200 // Process 200 items per request to stay within Vercel timeout
-            });
+        try {
+            if (cursor) {
+                console.log("[DropboxSync] Continuing with cursor...");
+                response = await dbx.filesListFolderContinue({ cursor });
+            } else {
+                console.log(`[DropboxSync] Starting new recursive scan in ${folderPath}...`);
+                response = await dbx.filesListFolder({
+                    path: folderPath,
+                    recursive: true,
+                    limit: 200
+                });
+            }
+        } catch (apiError: any) {
+            console.error("[DropboxSync] API Call Failed. Raw Error Response:", JSON.stringify(apiError, null, 2));
+            throw apiError;
         }
 
         const entries = response.result.entries;
@@ -137,6 +152,11 @@ export async function POST(req: Request) {
     } catch (error: any) {
         console.error("[DropboxSync] CRITICAL ERROR DETAILS:", error);
 
+        // Detailed error logging for Vercel
+        if (error.error) {
+            console.error("[DropboxSync] Dropbox API Error Object:", JSON.stringify(error.error, null, 2));
+        }
+
         let errorStatus = typeof error.status === 'number' ? error.status : 500;
         let errorCode = 'SYNC_ERROR';
         // Try to find a message in the object if .message is empty
@@ -150,7 +170,8 @@ export async function POST(req: Request) {
             userMessage = `Priečinok "${folderPath}" nebol v Dropboxe nájdený. Skontrolujte názov a štruktúru.`;
         } else if (errorStatus === 400) {
             errorCode = 'BAD_REQUEST';
-            userMessage = 'Chybná požiadavka (pravdepodobne nesprávny formát tokenu alebo nepovolené znaky v ceste).';
+            const details = JSON.stringify(error.error || {});
+            userMessage = `Chybná požiadavka na Dropbox (400). Detaily: ${details.substring(0, 100)}...`;
         }
 
         // Store failure status in DB
@@ -167,7 +188,8 @@ export async function POST(req: Request) {
             success: false,
             error: errorCode,
             message: userMessage,
-            details: error.message || 'Unknown technical error'
+            details: error.message || 'Unknown technical error',
+            fullError: JSON.stringify(error)
         }, { status: errorStatus === 500 ? 500 : (typeof errorStatus === 'number' ? errorStatus : 500) });
     }
 }

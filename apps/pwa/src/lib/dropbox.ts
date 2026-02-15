@@ -40,9 +40,13 @@ export async function refreshDropboxToken(clientId: string, clientSecret: string
 
 export async function getRefreshToken() {
     // Try DB Settings first, fall back to ENV
-    const clientId = await getSetting('DROPBOX_APP_KEY') || process.env.DROPBOX_APP_KEY;
-    const clientSecret = await getSetting('DROPBOX_APP_SECRET') || process.env.DROPBOX_APP_SECRET;
-    const refreshToken = await getSetting('DROPBOX_REFRESH_TOKEN') || process.env.DROPBOX_REFRESH_TOKEN;
+    const clientIdRaw = await getSetting('DROPBOX_APP_KEY') || process.env.DROPBOX_APP_KEY;
+    const clientSecretRaw = await getSetting('DROPBOX_APP_SECRET') || process.env.DROPBOX_APP_SECRET;
+    const refreshTokenRaw = await getSetting('DROPBOX_REFRESH_TOKEN') || process.env.DROPBOX_REFRESH_TOKEN;
+
+    const clientId = clientIdRaw?.trim();
+    const clientSecret = clientSecretRaw?.trim();
+    const refreshToken = refreshTokenRaw?.trim();
 
     if (!clientId || !clientSecret || !refreshToken) {
         throw new Error("Missing Dropbox Credentials (DB or .env)");
