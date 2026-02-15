@@ -22,6 +22,10 @@ export async function GET() {
             { id: 'GROQ_API_KEY', category: 'AI', isSecret: true },
             { id: 'OPENAI_API_KEY', category: 'AI', isSecret: true },
             { id: 'DROPBOX_ACCESS_TOKEN', category: 'STORAGE', isSecret: true },
+            { id: 'DROPBOX_REFRESH_TOKEN', category: 'STORAGE', isSecret: true },
+            { id: 'DROPBOX_APP_KEY', category: 'STORAGE', isSecret: true },
+            { id: 'DROPBOX_APP_SECRET', category: 'STORAGE', isSecret: true },
+            { id: 'DROPBOX_FOLDER_PATH', category: 'STORAGE', isSecret: false },
             { id: 'AGENT_ACCESS_TOKEN', category: 'AGENT', isSecret: false },
             { id: 'LOCAL_TEMPLATES_PATH', category: 'AGENT', isSecret: false },
             { id: 'LOCAL_OUTPUT_PATH', category: 'AGENT', isSecret: false }
