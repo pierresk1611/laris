@@ -1,34 +1,40 @@
 import { NextResponse } from 'next/server';
+import { getDropboxClient } from '@/lib/dropbox';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-    // In production, we'd fetch the token from process.env or a database
-    const token = process.env.DROPBOX_TOKEN;
-
-    if (!token) {
-        return NextResponse.json({
-            error: 'DROPBOX_TOKEN_MISSING',
-            message: 'Dropbox access token is not configured in environment variables.'
-        }, { status: 500 });
-    }
-
     try {
-        // This is where real Dropbox SDK/API calls would go
-        // Example: const dbx = new Dropbox({ accessToken: token });
+        const dbx = await getDropboxClient();
 
-        const mockTemplates = [
-            { name: 'JSO_15', path: '/TEMPLATES/JSO_15', lastModified: new Date().toISOString() },
-            { name: 'VSO_02', path: '/TEMPLATES/VSO_02', lastModified: new Date().toISOString() },
-            { name: 'JSO_22', path: '/TEMPLATES/JSO_22', lastModified: new Date().toISOString() },
-        ];
+        // Recursively fetch templates
+        // For now, let's just list the root or configured folder
+        const folderPath = '/TEMPLATES'; // TODO: Configurable?
+
+        const response = await dbx.filesListFolder({
+            path: folderPath,
+            recursive: true,
+            limit: 1000 // Get as many as possible
+        });
+
+        // Filter only folders or relevant files if needed
+        const templates = response.result.entries
+            .filter(e => e['.tag'] === 'folder' || e.name.endsWith('.psd'))
+            .map(e => ({
+                name: e.name,
+                path: e.path_lower,
+                lastModified: (e as any).client_modified || new Date().toISOString()
+            }));
 
         return NextResponse.json({
             success: true,
-            templates: mockTemplates
+            templates: templates
         });
     } catch (error: any) {
+        console.error("Dropbox API Error:", error);
         return NextResponse.json({
             success: false,
-            error: error.message
+            error: error.message || "Failed to fetch from Dropbox"
         }, { status: 500 });
     }
 }

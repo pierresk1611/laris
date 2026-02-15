@@ -41,8 +41,23 @@ export async function GET(
 
         const order = await response.json();
 
+        // FETCH LOCAL STATE
+        const localState = await prisma.localOrderState.findUnique({
+            where: {
+                orderId_shopId: {
+                    orderId: orderId,
+                    shopId: shop.id
+                }
+            }
+        });
+
+        const localStatesMap = new Map();
+        if (localState) {
+            localStatesMap.set(`${shop.id}-${orderId}`, localState);
+        }
+
         // Use our processor (wrap in array because processOrders expects an array)
-        const processed = await processOrders([order], shop.url, shop.name, shop.id);
+        const processed = await processOrders([order], shop.url, shop.name, shop.id, localStatesMap);
 
         return NextResponse.json({ success: true, order: processed[0] });
 

@@ -22,6 +22,8 @@ if (!AGENT_TOKEN || !LOCAL_ROOT_PATH) {
     process.exit(1);
 }
 
+const { getDropboxClient } = require('./lib/dropbox');
+
 // State
 let isProcessing = false;
 
@@ -256,6 +258,14 @@ async function main() {
 
     // Initial heartbeat
     await sendHeartbeat();
+
+    // Initialize Dropbox (fetch config)
+    try {
+        await getDropboxClient();
+        console.log("✅ Agent initialized (Dropbox Connected)");
+    } catch (e) {
+        console.warn("⚠️  Dropbox initialization failed (will retry on job):", e.message);
+    }
 
     setInterval(async () => {
         if (isProcessing) return; // Busy

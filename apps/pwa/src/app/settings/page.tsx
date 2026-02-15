@@ -529,6 +529,45 @@ export default function SettingsPage() {
                                         className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
                                     />
                                     <button
+                                        onClick={async () => {
+                                            const rToken = getSettingValue('DROPBOX_REFRESH_TOKEN');
+                                            const appKey = getSettingValue('DROPBOX_APP_KEY');
+                                            const appSecret = getSettingValue('DROPBOX_APP_SECRET');
+
+                                            if (!rToken || !appKey || !appSecret) {
+                                                alert("Pre testovanie vyplňte: App Key, App Secret aj Refresh Token.");
+                                                return;
+                                            }
+
+                                            setSaving('TEST_DROPBOX');
+                                            try {
+                                                const res = await fetch('/api/settings/test-dropbox', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        refreshToken: rToken,
+                                                        appKey: appKey,
+                                                        appSecret: appSecret
+                                                    })
+                                                });
+                                                const result = await res.json();
+                                                if (result.success) {
+                                                    alert("✅ " + result.message);
+                                                } else {
+                                                    alert("❌ Chyba: " + result.error);
+                                                }
+                                            } catch (e: any) {
+                                                alert("Chyba spojenia: " + e.message);
+                                            } finally {
+                                                setSaving(null);
+                                            }
+                                        }}
+                                        disabled={saving !== null}
+                                        className="px-4 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors"
+                                    >
+                                        {saving === 'TEST_DROPBOX' ? 'Testujem...' : 'Testovať'}
+                                    </button>
+                                    <button
                                         onClick={() => handleSaveSetting('DROPBOX_REFRESH_TOKEN', getSettingValue('DROPBOX_REFRESH_TOKEN'), 'STORAGE', true)}
                                         disabled={saving === 'DROPBOX_REFRESH_TOKEN'}
                                         className="px-6 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition-colors"
