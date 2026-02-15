@@ -1,6 +1,6 @@
 const fetch = require('node-fetch');
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = 'https://laris-automat.vercel.app/api';
 const TOKEN = 'test-agent-token-1771061963957'; // From previous step
 
 async function main() {

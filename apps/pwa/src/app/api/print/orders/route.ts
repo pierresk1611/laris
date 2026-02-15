@@ -15,43 +15,49 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: true, orders: [] });
         }
 
-        // 2. Fetch Orders from Woo (Parallel)
+        // 2. Fetch Raw Orders from Woo (Parallel)
         // We fetch 'processing' orders as they are candidates for printing
-        const orderPromises = shops.map(async (shop) => {
+        const rawOrderFetchPromises = shops.map(async (shop) => {
             try {
                 const rawUrl = (shop.url || "").toString().trim();
                 const rawCk = (shop.ck || "").toString().trim();
                 const rawCs = (shop.cs || "").toString().trim();
 
-                if (!rawUrl || !rawCk || !rawCs) return [];
+                if (!rawUrl || !rawCk || !rawCs) return { shop, rawOrders: [] };
 
                 const baseUrl = rawUrl.replace(/\/$/, "");
                 const apiUrl = `${baseUrl}/wp-json/wc/v3/orders?consumer_key=${rawCk}&consumer_secret=${rawCs}&per_page=${limit}&status=processing`;
 
                 const res = await fetch(apiUrl, { headers: { 'User-Agent': 'Laris-PWA/1.0' } });
-                if (!res.ok) return [];
+                if (!res.ok) return { shop, rawOrders: [] };
 
                 const rawOrders = await res.json();
-                if (!Array.isArray(rawOrders)) return [];
+                if (!Array.isArray(rawOrders)) return { shop, rawOrders: [] };
 
-                return processOrders(rawOrders, shop.url, shop.name, shop.id);
+                return { shop, rawOrders };
             } catch (e) {
                 console.error(`Failed to fetch from shop ${shop.name}`, e);
-                return [];
+                return { shop, rawOrders: [] };
             }
         });
 
-        const results = await Promise.all(orderPromises);
-        let allOrders: ProcessedOrder[] = results.flat();
+        const fetchedShopOrders = await Promise.all(rawOrderFetchPromises);
 
-        // 3. Fetch Local States
-        // Let's get all local states for these remote orders
-        const orderIds = allOrders.map(o => o.id.toString());
-        // 3. Fetch Local States
-        // We cast to any because localOrderState is a new model and the client might not be fully regenerated in the editor context
+        // 3. Preliminary gathering of IDs to fetch Local States
+        // We need to know which orders we have to fetch their local state
+        // BUT processOrders needs the local state to decide whether to use "Verified Data".
+        // So we need to fetch local states based on the RAW IDs first.
+
+        const allPotentialOrderIds: string[] = [];
+        fetchedShopOrders.forEach(({ rawOrders }) => {
+            rawOrders.forEach((o: any) => {
+                if (o.id) allPotentialOrderIds.push(o.id.toString());
+            });
+        });
+
         const localStates: any[] = await (prisma as any).localOrderState.findMany({
             where: {
-                orderId: { in: orderIds }
+                orderId: { in: allPotentialOrderIds }
             }
         });
 
@@ -60,21 +66,31 @@ export async function GET(request: Request) {
             stateMap.set(`${s.shopId}-${s.orderId}`, s);
         });
 
-        // 4. Transform and Filter
-        const finalOrders = allOrders.map(order => {
-            const localState = stateMap.get(`${order.shopId}-${order.id}`);
+        // 4. Process Orders with Local State Map
+        const finalOrdersPromise = fetchedShopOrders.map(async ({ shop, rawOrders }) => {
+            return processOrders(rawOrders, shop.url, shop.name, shop.id, stateMap);
+        });
+
+        const processedResults = await Promise.all(finalOrdersPromise);
+        let finalOrders: ProcessedOrder[] = processedResults.flat();
+
+        // 5. Final Filtering (e.g. only READY_FOR_PRINT)
+        finalOrders = finalOrders.filter(o => {
+            const localState = stateMap.get(`${o.shopId}-${o.id}`);
+            const status = localState?.status || 'PROCESSING';
+            return status === 'READY_FOR_PRINT';
+        });
+
+        // Add Local Data (format, note) to the final object if not already present in processed items
+        finalOrders = finalOrders.map(o => {
+            const localState = stateMap.get(`${o.shopId}-${o.id}`);
             return {
-                ...order,
-                localStatus: localState?.status || 'PROCESSING', // Default to PROCESSING if no record
+                ...o,
+                localStatus: localState?.status || 'PROCESSING',
+                sheetFormat: localState?.sheetFormat || 'SRA3',
                 note: localState?.note || null
             };
-        }).filter(o => (o as any).localStatus === 'READY_FOR_PRINT'); // ONLY show approved orders
-
-        // Optional: Filter by local status if requested
-        // const statusFilter = searchParams.get('localStatus');
-        // if (statusFilter) {
-        //     finalOrders = finalOrders.filter(o => o.localStatus === statusFilter);
-        // }
+        });
 
         return NextResponse.json({ success: true, orders: finalOrders });
 

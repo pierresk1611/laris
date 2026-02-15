@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { extractTemplateKey, parseEPO, needsInvitation } from './parser';
+import { extractTemplateKey, parseEPO, needsInvitation, parseItemQuantities, extractCRMId } from './parser';
 
 export interface ProcessedItem {
     id: number;
@@ -14,11 +14,13 @@ export interface ProcessedItem {
     rawMetaData: any[];
     downloads?: { label: string; url: string; name: string }[];
     isVerified?: boolean;
+    isSplitItem?: boolean; // Flag to indicate generated item
 }
 
 export interface ProcessedOrder {
     id: number;
     number: string;
+    crmId: string | null; // NEW: CRM ID
     status: string;
     customer: string;
     total: string;
@@ -33,7 +35,7 @@ export interface ProcessedOrder {
 /**
  * Enriches raw WooCommerce orders with template information and modified metadata.
  */
-export async function processOrders(rawOrders: any[], shopSource: string, shopName: string, shopId: string): Promise<ProcessedOrder[]> {
+export async function processOrders(rawOrders: any[], shopSource: string, shopName: string, shopId: string, localStatesMap?: Map<string, any>): Promise<ProcessedOrder[]> {
     try {
         if (!rawOrders || !Array.isArray(rawOrders)) {
             return [];
@@ -58,30 +60,100 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     throw new Error("Order data is not an object");
                 }
 
-                const items = (order.line_items || []).map((item: any) => {
-                    if (!item) return null;
+                // CHECK FOR VERIFIED LOCAL DATA FIRST
+                const localKey = `${shopId}-${order.id}`;
+                const localState = localStatesMap?.get(localKey);
+
+                if (localState && localState.isVerified && localState.orderData) {
+                    // Return the verified data directly!
+                    // We trust the local data completely for the items structure.
+                    // However, we might want to keep some dynamic fields from Woo like current Status if needed?
+                    // Implementation Plan said: "Updates from Woo ... will be ignored in favor of locally saved data" for CONTENT.
+                    // But maybe we still want to update Status (e.g. Cancelled)?
+                    // For now, let's mix: Base info from Woo (status, total), Items from Local.
+
+                    const verifiedItems = localState.orderData as ProcessedItem[];
+
+                    return {
+                        id: order.id || 0,
+                        number: order.number?.toString() || order.id?.toString() || "0000",
+                        crmId: extractCRMId(order.meta_data || []), // Keep pulling CRM ID dynamically or use saved? Let's use dynamic to be safe, or saved if we want strict lock.
+                        // Let's stick to dynamic for Order Level Metadata, but LOCKED for Item Content.
+                        status: order.status || 'unknown', // Allow status updates from Woo (e.g. Cancelled)
+                        customer: (() => {
+                            const billName = `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim();
+                            if (billName) return billName;
+                            return "Bez mena";
+                        })(),
+                        total: order.total || "0",
+                        currency: order.currency || "EUR",
+                        date: order.date_created || new Date().toISOString(),
+                        shopSource: shopName, // Use passed shop name
+                        shopName: shopName,
+                        shopId: shopId,
+                        items: verifiedItems // USED VERIFIED ITEMS
+                    };
+                }
+
+                const crmId = extractCRMId(order.meta_data || []);
+
+                // Use flatMap to allow splitting items
+                const items = (order.line_items || []).flatMap((item: any) => {
+                    if (!item) return [];
+
                     const templateKey = extractTemplateKey(item.name || "");
                     const templateInfo = templateKey ? templateMap.get(templateKey) : null;
-                    const templateId = templateInfo?.id || null;
-                    const isVerified = templateInfo?.isVerified || false;
                     const metaData = item.meta_data || [];
                     const epo = parseEPO(metaData);
 
-                    return {
+                    // Smart Quantity Parsing
+                    const quantities = parseItemQuantities(metaData, item.quantity || 1);
+
+                    const baseItem = {
                         id: item.id || 0,
                         name: item.name || "Neznáma položka",
                         price: item.price || "0",
-                        quantity: epo.epoQuantity ? parseInt(epo.epoQuantity) : (item.quantity || 1),
                         templateKey,
-                        templateId,
+                        templateId: templateInfo?.id || null,
                         hasInvitation: needsInvitation(item.name || "", metaData),
                         material: epo.material || null,
                         options: epo,
                         rawMetaData: metaData || [],
                         downloads: (epo as any).downloads || [],
-                        isVerified
+                        isVerified: templateInfo?.isVerified || false
                     };
-                }).filter((i: any) => i !== null);
+
+                    const resultItems: ProcessedItem[] = [];
+
+                    // 1. Main Item
+                    if (quantities.main > 0) {
+                        resultItems.push({
+                            ...baseItem,
+                            quantity: quantities.main,
+                            isSplitItem: false
+                        });
+                    }
+
+                    // 2. Invitation Item (if detected)
+                    if (quantities.invitations > 0) {
+                        resultItems.push({
+                            ...baseItem,
+                            id: (item.id || 0) + 999000, // Fake ID to avoid key collision
+                            name: `Pozvánka k stolu (${item.name})`,
+                            quantity: quantities.invitations,
+                            templateKey: null, // Invitation usually has diff template
+                            templateId: null,
+                            hasInvitation: false, // It IS an invitation
+                            isSplitItem: true,
+                            material: epo.material // Usually same paper
+                        });
+                    }
+
+                    // 3. Envelopes (optional, maybe not needed for print but good to have)
+                    // We don't print envelopes usually? Let's skip adding them to Print List for now unless requested.
+
+                    return resultItems;
+                });
 
                 const cleanSource = (() => {
                     const s = (shopSource || "").toLowerCase().trim();
@@ -99,6 +171,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                 return {
                     id: order.id || 0,
                     number: order.number?.toString() || order.id?.toString() || "0000",
+                    crmId,
                     status: order.status || 'unknown',
                     customer: (() => {
                         const billName = `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim();
@@ -109,9 +182,6 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
 
                         const billCompany = (order.billing?.company || '').trim();
                         if (billCompany) return billCompany;
-
-                        const shipCompany = (order.shipping?.company || '').trim();
-                        if (shipCompany) return shipCompany;
 
                         return "Bez mena";
                     })(),
@@ -128,6 +198,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                 return {
                     id: order?.id || 0,
                     number: "ERROR",
+                    crmId: null,
                     status: "error",
                     customer: `CHYBA: ${innerErr.message || 'Neznáma chyba v procesore'}`,
                     total: "0",

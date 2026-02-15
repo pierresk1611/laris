@@ -88,7 +88,25 @@ export async function GET(request: Request) {
             throw new Error(orders.message || orders.code || "WooCommerce returned an unexpected response format (not an array)");
         }
 
-        const transformedOrders = await processOrders(orders, shop.url, shop.name, shop.id);
+        // Fetch Local States for these orders
+        const orderIds = orders.map((o: any) => o.id?.toString()).filter(Boolean);
+        const localStates: any[] = await (prisma as any).localOrderState.findMany({
+            where: {
+                shopId: shop.id,
+                orderId: { in: orderIds }
+            }
+        });
+
+        const stateMap = new Map();
+        localStates.forEach((s: any) => {
+            stateMap.set(`${s.shopId}-${s.orderId}`, s);
+        });
+
+        const transformedOrders = await processOrders(orders, shop.url, shop.name, shop.id, stateMap);
+
+        // Append Local Status to the response so Dashboard can show it (e.g. Verified tag need?)
+        // processOrders now handles the CONTENT, but the dashboard might want top-level flags.
+        // processedOrders items have isVerified.
 
         return NextResponse.json({ success: true, orders: transformedOrders });
     } catch (error: any) {

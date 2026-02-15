@@ -46,13 +46,24 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                     const textKey = Object.keys(options).find(k => /text|pozvánka|oznámenie|citát/i.test(k));
                     const bodyText = textKey ? options[textKey] : (item?.name || "");
 
-                    setAiData({
-                        names: "", // Clear to avoid wrong customer name guessing
-                        date: "",  // Clear to avoid wrong order date
-                        location: "",
-                        body: bodyText, // Fill with the raw text for AI to parse
-                        originalBody: bodyText // Keep original for AI learning
-                    });
+                    // CHECK IF VERIFIED AND HAS SAVED AI DATA
+                    if (item?.isVerified && item.aiData) {
+                        setAiData({
+                            names: item.aiData.names || "",
+                            date: item.aiData.date || "",
+                            location: item.aiData.location || "",
+                            body: item.aiData.body || "",
+                            originalBody: item.aiData.originalBody || bodyText
+                        });
+                    } else {
+                        setAiData({
+                            names: "", // Clear to avoid wrong customer name guessing
+                            date: "",  // Clear to avoid wrong order date
+                            location: "",
+                            body: bodyText, // Fill with the raw text for AI to parse
+                            originalBody: bodyText // Keep original for AI learning
+                        });
+                    }
                 } else {
                     setError(data.error);
                 }
@@ -96,6 +107,14 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                         )}
                     </div>
                 </div>
+                {/* Verified Notification */}
+                {order.items?.some((i: any) => i.isVerified) && (
+                    <div className="bg-purple-100 text-purple-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border border-purple-200 shadow-sm mr-auto ml-4">
+                        <CheckCircle2 size={16} />
+                        <span>Dáta tejto objednávky boli manuálne overené a uložené.</span>
+                    </div>
+                )}
+
                 <div className="flex items-center gap-4"> {/* Added wrapper div for buttons */}
                     <button className="flex items-center gap-2 px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors">
                         <Trash2 size={16} />
@@ -138,7 +157,95 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                         <CheckCircle2 size={16} />
                         <span>Schváliť do Tlače</span>
                     </button>
-                    <button className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-shadow shadow-sm shadow-blue-200">
+                    <button
+                        onClick={async (e) => {
+                            const btn = e.currentTarget;
+                            const originalText = btn.innerText;
+                            btn.innerText = "⏳ Ukladám...";
+                            btn.disabled = true;
+
+                            // Construct updated items from AI State
+                            // We need to update the FIRST item (usually) with the new data from Smart Editor
+                            // or effectively "Bake" the current view into the order.
+
+                            const updatedItems = [...order.items];
+                            if (updatedItems.length > 0) {
+                                // Update the fields of the first item (or relevant item)
+                                // Currently Smart Editor edits `aiData`.
+                                // We need to map `aiData` back to the item structure if we want to save it as "Parsed".
+                                // BUT `aiData` structure (names, date, location, body) is different from `ProcessedItem`.
+                                // `ProcessedItem` has `options` (EPO).
+                                // We should probably update the `options` key-values?
+                                // OR we assume that `ProcessedItem` can hold `parsedResult`.
+
+                                // Simpler approach for now:
+                                // Save the specific AI fields into `options` or a new `parsedData` field if supported?
+                                // The verified data is stored in `orderData` column. 
+                                // Let's just update the item's `options` with the new text for now,
+                                // so when it re-loads, `parseEPO` might see it?
+                                // No, `parseEPO` parses `meta_data` from Woo. We are saving LOCAL override.
+
+                                // So we can save whatever we want in `orderData`.
+                                // Let's save the modified `items` array.
+                                // We need to update the item's properties based on AI Data to reflect "Reality".
+
+                                // For this task, let's assume we just want to "Freeze" the current state.
+                                // But if the user edited text in Smart Editor, where does it go?
+                                // It goes to `aiData.names` etc. 
+                                // We should probably stash this `aiData` into the item so it can be retrieved.
+
+                                updatedItems[0] = {
+                                    ...updatedItems[0],
+                                    isVerified: true,
+                                    aiData: aiData, // Save the editor state!
+                                    // Also update 'name' or 'options' if needed for Print? 
+                                    // The Print Generator uses `options` mostly.
+                                };
+                            }
+
+                            try {
+                                const res = await fetch(`/api/orders/${order.id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        shopId: order.shopId,
+                                        items: updatedItems,
+                                        isVerified: true
+                                    })
+                                });
+                                const data = await res.json();
+
+                                if (data.success) {
+                                    // Also trigger AI Learning if verified
+                                    await fetch('/api/ai/patterns', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            input: (aiData as any).originalBody || aiData.body,
+                                            output: {
+                                                names: aiData.names,
+                                                location: aiData.location,
+                                                date: aiData.date
+                                            }
+                                        })
+                                    });
+
+                                    btn.innerText = "✅ Uložené!";
+                                    window.location.reload();
+                                } else {
+                                    alert("Chyba: " + data.message);
+                                    btn.innerText = originalText;
+                                    btn.disabled = false;
+                                }
+                            } catch (e) {
+                                console.error(e);
+                                alert("Chyba spojenia");
+                                btn.innerText = originalText;
+                                btn.disabled = false;
+                            }
+                        }}
+                        className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-shadow shadow-sm shadow-blue-200"
+                    >
                         <Save size={16} />
                         <span>Uložiť & Synchronizovať</span>
                     </button>

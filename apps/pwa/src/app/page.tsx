@@ -244,9 +244,16 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${order.status === 'processing' ? 'bg-orange-400' : 'bg-green-500'}`} />
-                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{order.status}</span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${order.status === 'processing' ? 'bg-orange-400' : 'bg-green-500'}`} />
+                          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{order.status}</span>
+                        </div>
+                        {order.items?.some((i: any) => i.isVerified) && (
+                          <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[9px] font-black uppercase border border-purple-200 w-fit">
+                            ✅ PREPARSOVANÉ
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">

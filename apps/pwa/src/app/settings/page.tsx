@@ -15,7 +15,9 @@ import {
     RotateCw,
     FileText,
     UploadCloud,
-    Loader2
+    UploadCloud,
+    Loader2,
+    Printer
 } from "lucide-react";
 
 interface Shop {
@@ -108,7 +110,7 @@ function AgentStatusCard({ initialStatus }: { initialStatus: any }) {
 }
 
 export default function SettingsPage() {
-    const [activeTab, setActiveTab] = useState<'shops' | 'api' | 'agent' | 'db'>('shops');
+    const [activeTab, setActiveTab] = useState<'shops' | 'api' | 'agent' | 'db' | 'print'>('shops');
     const [shops, setShops] = useState<Shop[]>([]);
     const [settings, setSettings] = useState<Setting[]>([]);
     const [loading, setLoading] = useState(true);
@@ -281,6 +283,13 @@ export default function SettingsPage() {
                 >
                     <Database size={18} />
                     Databáza
+                </button>
+                <button
+                    onClick={() => setActiveTab('print')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'print' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                    <Printer size={18} />
+                    Tlač
                 </button>
             </div>
 
@@ -687,6 +696,7 @@ export default function SettingsPage() {
                             <RotateCw size={24} className="text-blue-400" />
                             AI Learning Stats
                         </h3>
+                        {/* ... existing db content ... */}
                         <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 mb-6">
                             <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Počet záznamov v ai_learning</p>
                             <p className="text-3xl font-black text-slate-900">{stats?.patternCount || 0}</p>
@@ -756,6 +766,58 @@ export default function SettingsPage() {
                             <button className="py-4 bg-red-50 border border-red-100 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-100">
                                 Vymazať cache
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* TAB 5: PRINT SETTINGS */}
+            {activeTab === 'print' && (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
+                        <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+                            <Printer size={24} className="text-purple-500" />
+                            Formáty Hárkov
+                        </h3>
+                        <p className="text-sm text-slate-500 mb-6">
+                            Definujte dostupné veľkosti hárkov pre Print Manager. Formát JSON: <code>{"{\"Nazov\": {\"width\": mm, \"height\": mm}}"}</code>.
+                        </p>
+
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Konfigurácia Formátov (JSON)</label>
+                            <textarea
+                                value={getSettingValue('PRINT_FORMATS') || JSON.stringify({
+                                    "SRA3": { "width": 320, "height": 450 },
+                                    "A3": { "width": 297, "height": 420 },
+                                    "A4": { "width": 210, "height": 297 },
+                                    "METAL_225_300": { "width": 225, "height": 300 }
+                                }, null, 2)}
+                                onChange={(e) => {
+                                    const newSettings = [...settings];
+                                    const idx = newSettings.findIndex(s => s.id === 'PRINT_FORMATS');
+                                    if (idx !== -1) newSettings[idx].value = e.target.value;
+                                    else newSettings.push({ id: 'PRINT_FORMATS', value: e.target.value, category: 'GENERAL', isSecret: false });
+                                    setSettings(newSettings);
+                                }}
+                                className="w-full h-64 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                            />
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={() => {
+                                        const val = getSettingValue('PRINT_FORMATS');
+                                        try {
+                                            JSON.parse(val); // Validate JSON
+                                            handleSaveSetting('PRINT_FORMATS', val, 'GENERAL', false);
+                                        } catch (e) {
+                                            alert("Neplatný JSON formát!");
+                                        }
+                                    }}
+                                    disabled={saving === 'PRINT_FORMATS'}
+                                    className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors"
+                                >
+                                    Uložiť Nastavenia Tlače
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

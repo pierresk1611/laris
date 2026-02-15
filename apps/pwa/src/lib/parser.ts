@@ -30,12 +30,100 @@ export function needsInvitation(productName: string, metaData: any[]): boolean {
 /**
  * Simple parser for EPO data from WooCommerce.
  */
+/**
+ * EXTRACTS CRM ID from Order Meta Data.
+ * User typically stores it in '_crm_id', '_order_number_formatted', or similar.
+ */
+export function extractCRMId(metaData: any[]): string | null {
+    if (!Array.isArray(metaData)) return null;
+
+    // Priority keys
+    const keysToCheck = ['_crm_id', '_order_number_formatted', 'crm_id', 'variable_symbol'];
+
+    for (const k of keysToCheck) {
+        const found = metaData.find(m => m.key === k);
+        if (found && found.value) return String(found.value);
+    }
+
+    // Fallback: Check for value containing specific format? (e.g. 2025...)
+    return null;
+}
+
+/**
+ * Parses EPO data to find sub-items like Invitations or Envelopes.
+ * Returns a breakdown of quantities.
+ */
+export function parseItemQuantities(metaData: any[], defaultQty: number = 1) {
+    const breakdown = {
+        main: 0,
+        invitations: 0,
+        envelopes: 0
+    };
+
+    let mainFound = false;
+
+    // Helper regex to grab the first number in a string "40 23,60 €" -> 40
+    const extractNum = (val: string) => {
+        const match = String(val).match(/(\d+)/);
+        return match ? parseInt(match[1]) : 0;
+    };
+
+    if (Array.isArray(metaData)) {
+        metaData.forEach(meta => {
+            // Check EPO Data inside _tmcartepo_data or direct meta
+            let label = (meta.display_key || meta.key || meta.label || "").toLowerCase();
+            let value = (meta.display_value || meta.value || "").toString();
+
+            // Handle nested EPO
+            if (meta.key === '_tmcartepo_data' && Array.isArray(meta.value)) {
+                meta.value.forEach((epoItem: any) => {
+                    const l = (epoItem.section_label || epoItem.name || "").toLowerCase();
+                    const v = (epoItem.value || "").toString();
+
+                    if (l.includes("počet oznámení") || l.includes("počet kusov")) {
+                        const q = extractNum(v);
+                        if (q > 0) { breakdown.main = q; mainFound = true; }
+                    }
+                    else if (l.includes("počet pozvánok") || l.includes("pozvánky")) {
+                        const q = extractNum(v);
+                        if (q > 0) breakdown.invitations = q;
+                    }
+                    else if (l.includes("počet obálok") || l.includes("obálky")) {
+                        const q = extractNum(v);
+                        if (q > 0) breakdown.envelopes = q;
+                    }
+                });
+            } else {
+                // Direct Meta checks
+                if (label.includes("počet oznámení") || label.includes("počet kusov")) {
+                    const q = extractNum(value);
+                    if (q > 0) { breakdown.main = q; mainFound = true; }
+                }
+                else if (label.includes("počet pozvánok")) {
+                    const q = extractNum(value);
+                    if (q > 0) breakdown.invitations = q;
+                }
+            }
+        });
+    }
+
+    // Default fallback if no specific main quantity found
+    if (!mainFound) {
+        breakdown.main = defaultQty;
+    }
+
+    return breakdown;
+}
+
+/**
+ * Simple parser for EPO data from WooCommerce.
+ * (Modified to be lighter, logic moved to parseItemQuantities for splitting)
+ */
 export function parseEPO(metaData: any[]) {
     const result: Record<string, string> = {};
 
     if (!Array.isArray(metaData)) return result;
 
-    // Helper to add to result without overwriting unless necessary
     const addToResult = (key: string, val: any) => {
         const cleanKey = String(key || "").trim();
         const cleanVal = String(val || "").trim();
@@ -47,26 +135,15 @@ export function parseEPO(metaData: any[]) {
     metaData.forEach(meta => {
         const key = meta.key || "";
 
-        // 1. Handle EPO Data (Extra Product Options)
+        // 1. Handle EPO Data
         if (key === '_tmcartepo_data') {
             const epoData = meta.value;
             if (Array.isArray(epoData)) {
                 epoData.forEach((item: any) => {
-                    // Extract Label: Value pairs
-                    // section_label is often the group name, name is the field name
                     const label = item.section_label || item.name || "";
                     const value = item.value;
+                    if (label && value) addToResult(label, value);
 
-                    if (label && value) {
-                        addToResult(label, value);
-                    }
-
-                    // Extract quantity if present in EPO item (optional field in some versions)
-                    if (item.quantity && !isNaN(parseInt(item.quantity))) {
-                        result.epoQuantity = String(item.quantity);
-                    }
-
-                    // Special Handling for Uploads
                     if (item.element?.type === "upload" && item.file?.url) {
                         if (!result.downloads) (result as any).downloads = [];
                         (result as any).downloads.push({
@@ -78,8 +155,7 @@ export function parseEPO(metaData: any[]) {
                 });
             }
         }
-
-        // 2. Handle Standard/Visible Meta (skip hidden ones except EPO)
+        // 2. Standard Meta
         else if (!key.startsWith('_')) {
             const label = meta.display_key || meta.key || meta.label;
             const value = meta.display_value || meta.value;
@@ -87,24 +163,11 @@ export function parseEPO(metaData: any[]) {
         }
     });
 
-    // 3. Map for internal logic (backward compatibility)
-    // We scan the *result* keys now to find material, color, and QUANTITY
+    // Extract basic material info
     Object.entries(result).forEach(([label, value]) => {
         const l = label.toLowerCase();
-
-        // Material/Color
         if (l.includes("materiál") || l.includes("papier")) result.material = value;
         if (l.includes("farba")) result.color = value;
-        if (l.includes("typ metalickej")) result.metalType = value;
-
-        // Custom Quantity (EPO often overrides Woo quantity)
-        // We look for "počet" or "kus" but avoid "obálok" if possible to prioritize the main item
-        if ((l.includes("počet") || l.includes("kusov")) && !l.includes("obálok")) {
-            const num = parseInt(value.toString().replace(/[^0-9]/g, ''));
-            if (!isNaN(num)) {
-                result.epoQuantity = num.toString();
-            }
-        }
     });
 
     return result;
