@@ -95,3 +95,22 @@ model LocalOrderState {
 
   @@unique([orderId, shopId])
 }
+
+model FileInbox {
+  id          String   @id @default(cuid())
+  name        String
+  path        String   @unique // Dropbox path
+  extension   String
+  status      String   @default("UNCLASSIFIED") // UNCLASSIFIED, PROCESSED, IGNORED
+  prediction  Json?    // Stores AI prediction data { type: "TEMPLATE", confidence: 0.9, reasoning: "..." }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AiClassificationExample {
+  id        String   @id @default(cuid())
+  filename  String
+  category  String   // TEMPLATE, DOCUMENT, IGNORE
+  reasoning String?
+  createdAt DateTime @default(now())
+}
