@@ -261,8 +261,8 @@ export default function TemplatesPage() {
                     <button
                         onClick={() => setActiveTab('TEMPLATES')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'TEMPLATES'
-                                ? 'bg-white text-blue-600 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-700'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
                             }`}
                     >
                         <Layers size={16} />
@@ -274,8 +274,8 @@ export default function TemplatesPage() {
                     <button
                         onClick={() => setActiveTab('INBOX')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'INBOX'
-                                ? 'bg-white text-blue-600 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-700'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
                             }`}
                     >
                         <Inbox size={16} />
@@ -290,14 +290,37 @@ export default function TemplatesPage() {
 
                 <div className="flex items-center gap-3 w-full md:w-auto">
                     {activeTab === 'INBOX' && (
-                        <button
-                            onClick={runAiAnalysis}
-                            disabled={isAnalyzing || inboxItems.length === 0}
-                            className={`flex items-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-2xl text-sm font-bold hover:bg-purple-700 transition-all shadow-xl shadow-purple-200 ${isAnalyzing ? 'opacity-70' : ''}`}
-                        >
-                            {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-                            <span>AI Triedenie</span>
-                        </button>
+                        <>
+                            <button
+                                onClick={async () => {
+                                    toast.promise(
+                                        fetch('/api/inbox/aggregate', { method: 'POST' }).then(r => r.json()),
+                                        {
+                                            loading: 'Analyzujem a zlučujem súbory...',
+                                            success: (data) => {
+                                                fetchData();
+                                                return data.message;
+                                            },
+                                            error: 'Chyba pri agregácii'
+                                        }
+                                    );
+                                }}
+                                disabled={inboxItems.length === 0}
+                                className="flex items-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
+                            >
+                                <Layers size={16} />
+                                <span>Auto-Mapping</span>
+                            </button>
+
+                            <button
+                                onClick={runAiAnalysis}
+                                disabled={isAnalyzing || inboxItems.length === 0}
+                                className={`flex items-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-2xl text-sm font-bold hover:bg-purple-700 transition-all shadow-xl shadow-purple-200 ${isAnalyzing ? 'opacity-70' : ''}`}
+                            >
+                                {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                                <span>AI Triedenie</span>
+                            </button>
+                        </>
                     )}
 
                     <button
@@ -417,8 +440,8 @@ export default function TemplatesPage() {
                                                     {item.prediction ? (
                                                         <div className="flex items-center gap-2">
                                                             <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${isAiTemplate ? 'bg-green-100 text-green-700' :
-                                                                    isAiDoc ? 'bg-blue-100 text-blue-700' :
-                                                                        'bg-slate-100 text-slate-600'
+                                                                isAiDoc ? 'bg-blue-100 text-blue-700' :
+                                                                    'bg-slate-100 text-slate-600'
                                                                 }`}>
                                                                 {item.prediction.category}
                                                             </span>

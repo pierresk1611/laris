@@ -58,8 +58,43 @@ export async function PATCH(req: Request) {
             }
         });
 
-        // Trigger side-effects if DONE? (e.g. Update Order Status)
-        // For now, just update the Job record.
+        // Trigger side-effects if DONE
+        if (job.status === 'DONE' && job.type === 'SCAN_LAYERS' && job.result) {
+            const resultData = job.result as any;
+            const layers = resultData.layers || [];
+
+            // Verification Logic
+            const requiredLayers = ['NAME_MAIN', 'DATE_MAIN', 'BODY_FULL'];
+            const hasRequiredLayer = layers.some((l: string) => requiredLayers.includes(l));
+
+            const payload = job.payload as any;
+            const templateId = payload.templateId; // We added this in aggregate route
+
+            if (templateId) {
+                if (hasRequiredLayer) {
+                    await prisma.template.update({
+                        where: { id: templateId },
+                        data: {
+                            isVerified: true,
+                            status: 'ACTIVE',
+                            // We can also store the mapping data if needed
+                            mappingData: { layers }
+                        }
+                    });
+                    console.log(`[JobComplete] Template ${templateId} VERIFIED ✅`);
+                } else {
+                    await prisma.template.update({
+                        where: { id: templateId },
+                        data: {
+                            isVerified: false,
+                            status: 'UNMAPPED',
+                            mappingData: { layers }
+                        }
+                    });
+                    console.log(`[JobComplete] Template ${templateId} UNMAPPED ❌`);
+                }
+            }
+        }
 
         return NextResponse.json({ success: true, job });
     } catch (error: any) {
