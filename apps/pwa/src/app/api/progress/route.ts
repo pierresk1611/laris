@@ -12,7 +12,8 @@ export async function GET() {
         if (syncProgressJson) {
             try {
                 syncProgress = JSON.parse(syncProgressJson);
-                if (Date.now() - updatedAt.getTime() > 300000) { // 5 minutes validity
+                const lastUpdate = syncProgress.updatedAt ? new Date(syncProgress.updatedAt) : new Date();
+                if (Date.now() - lastUpdate.getTime() > 300000) { // 5 minutes validity
                     syncProgress = null; // Stale, process likely finished or died
                 }
             } catch (e) { }
