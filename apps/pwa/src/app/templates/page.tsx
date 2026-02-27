@@ -128,58 +128,33 @@ export default function TemplatesPage() {
     const handleDropboxSync = async () => {
         setIsSyncing(true);
 
-        const syncPromise = async () => {
-            let hasMore = true;
-            let cursor: string | null = null;
-            let totalCount = 0;
-            let batchCount = 0;
+        const triggerScan = async () => {
+            const response = await fetch('/api/templates/scan', {
+                method: 'POST'
+            });
 
-            while (hasMore) {
-                // Fetch batch
-                const response = await fetch('/api/templates/sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cursor })
-                });
-
-                if (!response.ok) {
-                    const text = await response.text();
-                    let errorDetails = `Status ${response.status}`;
-                    try {
-                        const data = JSON.parse(text);
-                        errorDetails = data.message || data.details || errorDetails;
-                    } catch (e) { }
-                    throw new Error(errorDetails);
-                }
-
-                const data: { success: boolean, hasMore: boolean, cursor: string | null, count: number, message?: string } = await response.json();
-                if (!data.success) throw new Error(data.message || 'Sync failed');
-
-                // Update state for next loop
-                cursor = data.cursor;
-                hasMore = data.hasMore;
-                const currentCount = data.count || 0;
-                totalCount += currentCount;
-                batchCount++;
-
-                console.log(`[SyncLoop] Batch ${batchCount} done. Added ${currentCount} Inbox items. HasMore: ${hasMore}`);
+            if (!response.ok) {
+                throw new Error('Nepodarilo sa vytvoriť úlohu skenovania.');
             }
 
-            return { message: `Synchronizácia dokončená. Skontrolujte Inbox (${totalCount} nových položiek).` };
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error || 'Chyba pri vytváraní úlohy.');
+
+            return { message: 'Úloha odoslaná Agentovi. Skenovanie prebieha na pozadí.' };
         };
 
-        toast.promise(syncPromise(), {
-            loading: 'Synchronizujem Dropbox (môže to chvíľu trvať)...',
+        toast.promise(triggerScan(), {
+            loading: 'Odosielam príkaz Agentovi...',
             success: (data) => {
-                setIsSyncing(false);
-                fetchData();
+                // Poll for updates or just let the swr/polling handle it
+                // We'll reset syncing state after a short delay to allow UI to show "Success"
+                setTimeout(() => setIsSyncing(false), 2000);
                 return data.message;
             },
             error: (err: any) => {
                 setIsSyncing(false);
-                console.error('[DropboxSyncToast] Error:', err);
-                const msg = err.message || 'Neznáma chyba';
-                return `SYNC_CHYBA: ${msg}`;
+                console.error('[ScanError]', err);
+                return 'Chyba: Agent nie je dostupný alebo nastala chyba.';
             }
         });
     };

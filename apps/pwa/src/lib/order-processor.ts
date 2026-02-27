@@ -141,8 +141,8 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                             id: (item.id || 0) + 999000, // Fake ID to avoid key collision
                             name: `Pozvánka k stolu (${item.name})`,
                             quantity: quantities.invitations,
-                            templateKey: null, // Invitation usually has diff template
-                            templateId: null,
+                            templateKey: templateKey ? `${templateKey}P` : null, // Invitation usually has suffix 'P'
+                            templateId: templateKey ? templateMap.get(`${templateKey}P`)?.id || null : null,
                             hasInvitation: false, // It IS an invitation
                             isSplitItem: true,
                             material: epo.material // Usually same paper

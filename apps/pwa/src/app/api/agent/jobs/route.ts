@@ -21,10 +21,14 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status') || 'PENDING';
+    const type = searchParams.get('type');
 
     try {
+        const whereClause: any = { status };
+        if (type) whereClause.type = type;
+
         const jobs = await prisma.job.findMany({
-            where: { status: status },
+            where: whereClause,
             orderBy: { createdAt: 'asc' },
             take: 1 // Fetch 1 job at a time to avoid conflicts? Agent handles one by one anyway.
         });

@@ -13,23 +13,35 @@ import {
     ScanSearch,
     FileUp,
     CheckCircle2,
-    AlertTriangle
+    AlertTriangle,
+    Layers,
+    Copy,
+    RefreshCw,
+    Printer
 } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useMemo } from "react";
+import { toast } from "sonner";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 export default function OrderDetail({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const [order, setOrder] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [aiData, setAiData] = useState({
+
+    // Workspace State
+    const [activeTabId, setActiveTabId] = useState<string | null>(null);
+
+    // Shared Data (Synced across all tabs)
+    const [sharedData, setSharedData] = useState({
         names: "",
         date: "",
-        location: "",
-        body: "",
-        originalBody: ""
+        location: ""
     });
+
+    // Per-Item Data (Body text is unique per item)
+    const [itemsData, setItemsData] = useState<Record<string, { body: string; originalBody: string; isVerified: boolean }>>({});
 
     useEffect(() => {
         const fetchOrder = async () => {
@@ -37,33 +49,47 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                 const res = await fetch(`/api/woo/orders/${id}`);
                 const data = await res.json();
                 if (data.success) {
-                    setOrder(data.order);
-                    const item = data.order.items?.[0];
-                    const options = item?.options || {};
+                    const fetchedOrder = data.order;
+                    setOrder(fetchedOrder);
 
-                    // Smart pre-fill from EPO data
-                    // 1. Find the main text block (usually "Text pozvánky" or similar)
-                    const textKey = Object.keys(options).find(k => /text|pozvánka|oznámenie|citát/i.test(k));
-                    const bodyText = textKey ? options[textKey] : (item?.name || "");
+                    // Initialize Items Data
+                    const initialItemsData: any = {};
+                    let firstItem = true;
+                    let initialSharedData = { names: "", date: "", location: "" };
 
-                    // CHECK IF VERIFIED AND HAS SAVED AI DATA
-                    if (item?.isVerified && item.aiData) {
-                        setAiData({
-                            names: item.aiData.names || "",
-                            date: item.aiData.date || "",
-                            location: item.aiData.location || "",
-                            body: item.aiData.body || "",
-                            originalBody: item.aiData.originalBody || bodyText
-                        });
-                    } else {
-                        setAiData({
-                            names: "", // Clear to avoid wrong customer name guessing
-                            date: "",  // Clear to avoid wrong order date
-                            location: "",
-                            body: bodyText, // Fill with the raw text for AI to parse
-                            originalBody: bodyText // Keep original for AI learning
-                        });
-                    }
+                    fetchedOrder.items?.forEach((item: any) => {
+                        if (firstItem) {
+                            setActiveTabId(item.id.toString());
+                            firstItem = false;
+                        }
+
+                        // Try to find existing AI data
+                        const savedAiData = item.aiData || {};
+
+                        // Extract shared data from the FIRST verified item, or just the first item
+                        if (!initialSharedData.names && savedAiData.names) {
+                            initialSharedData = {
+                                names: savedAiData.names || "",
+                                date: savedAiData.date || "",
+                                location: savedAiData.location || ""
+                            };
+                        }
+
+                        // Determine Body Text
+                        const options = item.options || {};
+                        const textKey = Object.keys(options).find(k => /text|pozvánka|oznámenie|citát/i.test(k));
+                        const bodyText = savedAiData.body || options[textKey!] || item.name || "";
+
+                        initialItemsData[item.id] = {
+                            body: bodyText,
+                            originalBody: savedAiData.originalBody || bodyText,
+                            isVerified: item.isVerified || false
+                        };
+                    });
+
+                    setItemsData(initialItemsData);
+                    setSharedData(initialSharedData);
+
                 } else {
                     setError(data.error);
                 }
@@ -76,7 +102,204 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
         fetchOrder();
     }, [id]);
 
-    if (isLoading) return <div className="p-12 text-center text-slate-400 font-bold">Načítavam objednávku...</div>;
+    const handleSaveAll = async () => {
+        if (!order) return;
+
+        const toastId = toast.loading("Ukladám všetky položky...");
+
+        try {
+            // Merge state back into items
+            const updatedItems = order.items.map((item: any) => {
+                const iData = itemsData[item.id] || {};
+                return {
+                    ...item,
+                    isVerified: true, // Mark as verified on save
+                    aiData: {
+                        names: sharedData.names,
+                        date: sharedData.date,
+                        location: sharedData.location,
+                        body: iData.body,
+                        originalBody: iData.originalBody
+                    }
+                };
+            });
+
+            const res = await fetch(`/api/orders/${order.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    shopId: order.shopId,
+                    items: updatedItems,
+                    isVerified: true
+                })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                toast.success("Všetky dáta uložené!", { id: toastId });
+                // Optimistically update local order
+                setOrder({ ...order, items: updatedItems });
+
+                // Update local items state to reflect verified
+                const newItemsData = { ...itemsData };
+                Object.keys(newItemsData).forEach(k => newItemsData[k].isVerified = true);
+                setItemsData(newItemsData);
+
+            } else {
+                toast.error("Chyba pri ukladaní: " + data.message, { id: toastId });
+            }
+        } catch (e) {
+            toast.error("Chyba spojenia", { id: toastId });
+        }
+    };
+
+    const activeItem = useMemo(() => {
+        if (!order || !activeTabId) return null;
+        return order.items.find((i: any) => i.id.toString() === activeTabId.toString());
+    }, [order, activeTabId]);
+
+
+    // Preview State
+    const [previews, setPreviews] = useState<Record<string, string>>({});
+    const [isGenerating, setIsGenerating] = useState<Record<string, boolean>>({});
+
+    const handleGeneratePreview = async (itemId: string) => {
+        if (!order) return;
+        const item = order.items.find((i: any) => i.id.toString() === itemId);
+        if (!item || !item.templateKey) {
+            toast.error("Položka nemá priradenú šablónu.");
+            return;
+        }
+
+        setIsGenerating(prev => ({ ...prev, [itemId]: true }));
+        const toastId = toast.loading(`Generujem náhľad pre ${item.name}...`);
+
+        try {
+            const res = await fetch('/api/print/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    orderId: order.id,
+                    itemId: item.id,
+                    templateKey: item.templateKey,
+                    data: {
+                        names: sharedData.names,
+                        date: sharedData.date,
+                        location: sharedData.location,
+                        body: itemsData[itemId]?.body || ""
+                    }
+                })
+            });
+            const result = await res.json();
+
+            if (result.success && result.url) {
+                setPreviews(prev => ({ ...prev, [itemId]: result.url }));
+                toast.success("Náhľad vygenerovaný!", { id: toastId });
+            } else {
+                if (result.requiresAgent) {
+                    toast.warning(result.error, { id: toastId, duration: 5000 });
+                } else {
+                    toast.error("Chyba generovania: " + (result.error || "Neznáma chyba"), { id: toastId });
+                }
+            }
+        } catch (e) {
+            toast.error("Chyba spojenia", { id: toastId });
+        } finally {
+            setIsGenerating(prev => ({ ...prev, [itemId]: false }));
+        }
+    };
+
+    const handleBulkGenerate = async () => {
+        if (!order || !order.items) return;
+
+        const toastId = toast.loading("Spúšťam hromadné generovanie...");
+        let successCount = 0;
+
+        // Iterate sequentially to avoid overwhelming the Agent/Photoshop
+        for (const item of order.items) {
+            if (item.templateKey) {
+                try {
+                    // Trigger generation (reuse logic or call API)
+                    // We'll call the same API endpoint
+                    setIsGenerating(prev => ({ ...prev, [item.id]: true }));
+
+                    const res = await fetch('/api/print/preview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            orderId: order.id,
+                            itemId: item.id,
+                            templateKey: item.templateKey,
+                            data: {
+                                names: sharedData.names,
+                                date: sharedData.date,
+                                location: sharedData.location,
+                                body: itemsData[item.id]?.body || ""
+                            }
+                        })
+                    });
+                    const result = await res.json();
+                    if (result.success && result.url) {
+                        setPreviews(prev => ({ ...prev, [item.id]: result.url }));
+                        successCount++;
+                    }
+                } catch (e) {
+                    console.error(`Failed to generate for ${item.id}`, e);
+                } finally {
+                    setIsGenerating(prev => ({ ...prev, [item.id]: false }));
+                }
+            }
+        }
+
+        toast.success(`Hromadné generovanie dokončené. Úspešne: ${successCount} / ${order.items.length}`, { id: toastId });
+    };
+
+    const handleSendToPrint = async () => {
+        if (!order || !order.items) return;
+
+        const toastId = toast.loading("Odosielam do tlače...");
+
+        try {
+            await handleSaveAll(); // Ensure latest data is saved
+
+            const res = await fetch('/api/agent/jobs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'STATUS_PRINT_READY',
+                    payload: {
+                        orderId: order.id,
+                        customerName: order.customer,
+                        items: order.items.filter((i: any) => i.templateKey).map((item: any) => {
+                            const iData = itemsData[item.id] || {};
+                            return {
+                                id: item.id,
+                                template_rel_path: `TEMPLATES/${item.templateKey}.psd`,
+                                data: {
+                                    names: sharedData.names,
+                                    date: sharedData.date,
+                                    location: sharedData.location,
+                                    body: iData.body || ""
+                                }
+                            };
+                        })
+                    }
+                })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Úloha odoslaná Agentovi na tlač!", { id: toastId });
+            } else {
+                toast.error("Chyba odoslania: " + data.message, { id: toastId });
+            }
+        } catch (e) {
+            toast.error("Chyba spojenia", { id: toastId });
+        }
+    };
+
+
+    if (isLoading) return <div className="p-12 text-center text-slate-400 font-bold flex items-center justify-center gap-2"><RefreshCw className="animate-spin" /> Načítavam...</div>;
     if (error || !order) return (
         <div className="p-12 text-center text-red-500 font-bold">
             <p>Chyba pri načítaní detailov.</p>
@@ -87,468 +310,240 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
 
     return (
         <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
-            <div className="flex items-center justify-between mb-6">
+            {/* HEADER */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
                 <div className="flex items-center gap-4">
                     <Link href="/" className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
                         <ChevronLeft size={24} className="text-slate-600" />
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-black text-slate-900">Objednávka #{order.number}</h1>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            Šablóna: {order.items?.[0]?.templateKey || 'Nezistená'} • Zdroj: {order.shopSource}
-                        </p>
-                        {order.items?.[0]?.templateKey && (
-                            <div className={`mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border ${order.items[0].isVerified ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                {order.items[0].isVerified ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-                                <span>
-                                    {order.items[0].isVerified ? 'Overená šablóna (Katalóg)' : 'Neoverená šablóna (Chýba v katalógu)'}
-                                </span>
+                        <div className="flex items-baseline gap-3">
+                            <h1 className="text-xl font-black text-slate-900">#{order.number}</h1>
+                            <span className="text-sm font-bold text-slate-500">{order.customer}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
+                            <span>{order.shopSource}</span>
+                            <span>•</span>
+                            <span>{new Date(order.date).toLocaleDateString('sk-SK')}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleSaveAll}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                    >
+                        <Save size={16} />
+                        <span>Uložiť Všetko</span>
+                    </button>
+
+                    <button
+                        onClick={handleBulkGenerate}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-800 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all border border-slate-200"
+                    >
+                        <Play size={16} className="text-purple-600" />
+                        <span>Generovať Celú Sadu</span>
+                    </button>
+
+                    <button
+                        onClick={handleSendToPrint}
+                        className="flex items-center gap-2 px-6 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+                    >
+                        <Printer size={16} className="text-yellow-400" />
+                        <span>Odoslať do tlače</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* WORKSPACE CONTENT */}
+            <div className="flex-1 flex overflow-hidden">
+
+                {/* LEFT: TABS & ITEM LIST */}
+                <div className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col overflow-y-auto">
+                    <div className="p-4">
+                        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Položky objednávky</h3>
+                        <div className="space-y-2">
+                            {order.items?.map((item: any) => {
+                                const isActive = activeTabId === item.id.toString();
+                                const hasTemplate = !!item.templateKey;
+                                const isVerified = itemsData[item.id]?.isVerified;
+                                const isGen = isGenerating[item.id];
+
+                                return (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => setActiveTabId(item.id.toString())}
+                                        className={`w-full text-left p-3 rounded-xl transition-all border ${isActive
+                                            ? 'bg-white border-blue-200 shadow-sm ring-1 ring-blue-100'
+                                            : 'bg-transparent border-transparent hover:bg-slate-100'
+                                            }`}
+                                    >
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className={`text-[10px] font-black uppercase tracking-widest ${hasTemplate ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                {item.templateKey || 'BEZ ŠABLÓNY'}
+                                            </span>
+                                            {isGen ? <RefreshCw size={12} className="animate-spin text-blue-500" /> : (isVerified && <CheckCircle2 size={12} className="text-green-500" />)}
+                                        </div>
+                                        <div className={`text-xs font-bold ${isActive ? 'text-slate-900' : 'text-slate-600'}`}>
+                                            {item.name}
+                                        </div>
+                                        {/* Optional: Show small preview of content? */}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+
+                {/* MIDDLE: EDITOR COMPONENT */}
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-slate-100/50">
+
+                    {/* EDITOR FORM */}
+                    <div className="w-full md:w-1/2 p-6 overflow-y-auto border-r border-slate-200 bg-white">
+                        {activeItem ? (
+                            <div className="max-w-xl mx-auto space-y-8">
+
+                                {/* SHARED DATA SECTION */}
+                                <section className="p-5 bg-blue-50/50 rounded-2xl border border-blue-100">
+                                    <div className="flex items-center gap-2 mb-4 text-blue-800">
+                                        <Layers size={16} />
+                                        <h3 className="text-xs font-bold uppercase tracking-widest">Spoločné údaje (Zdieľané)</h3>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mená</label>
+                                            <input
+                                                type="text"
+                                                value={sharedData.names}
+                                                onChange={(e) => setSharedData({ ...sharedData, names: e.target.value })}
+                                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                                                placeholder="napr. Mária & Peter"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Dátum</label>
+                                                <input
+                                                    type="text"
+                                                    value={sharedData.date}
+                                                    onChange={(e) => setSharedData({ ...sharedData, date: e.target.value })}
+                                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    placeholder="24.08.2024"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Miesto</label>
+                                                <input
+                                                    type="text"
+                                                    value={sharedData.location}
+                                                    onChange={(e) => setSharedData({ ...sharedData, location: e.target.value })}
+                                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    placeholder="Bratislava"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                {/* ITEM SPECIFIC DATA */}
+                                <section>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
+                                            Text pre: <span className="text-slate-700">{activeItem.name}</span>
+                                        </label>
+                                        <button
+                                            onClick={() => {
+                                                // Todo: AI Parse Logic specifically for this body
+                                                toast.info("AI Parse pre toto pole zatiaľ nie je napojený na tlačidlo.");
+                                            }}
+                                            className="text-[10px] text-blue-600 font-bold hover:underline cursor-pointer"
+                                        >
+                                            AI PARSE
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        rows={8}
+                                        value={itemsData[activeItem.id]?.body || ""}
+                                        onChange={(e) => setItemsData({
+                                            ...itemsData,
+                                            [activeItem.id]: { ...itemsData[activeItem.id], body: e.target.value }
+                                        })}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all resize-none shadow-sm"
+                                        placeholder="Text pre túto položku..."
+                                    />
+                                </section>
+
+                                {/* SOURCE DATA (READ ONLY) */}
+                                <section className="pt-6 border-t border-slate-100">
+                                    <details className="group">
+                                        <summary className="flex items-center gap-2 cursor-pointer text-slate-400 hover:text-slate-600 transition-colors">
+                                            <ScanSearch size={16} />
+                                            <span className="text-xs font-bold uppercase tracking-widest">Zobraziť zdrojové dáta</span>
+                                        </summary>
+                                        <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-600 font-mono whitespace-pre-wrap">
+                                            {JSON.stringify(activeItem.options, null, 2)}
+                                        </div>
+                                    </details>
+                                </section>
+
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-slate-400">
+                                Vyberte položku zo zoznamu
                             </div>
                         )}
                     </div>
-                </div>
-                {/* Verified Notification */}
-                {order.items?.some((i: any) => i.isVerified) && (
-                    <div className="bg-purple-100 text-purple-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border border-purple-200 shadow-sm mr-auto ml-4">
-                        <CheckCircle2 size={16} />
-                        <span>Dáta tejto objednávky boli manuálne overené a uložené.</span>
-                    </div>
-                )}
 
-                <div className="flex items-center gap-4"> {/* Added wrapper div for buttons */}
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors">
-                        <Trash2 size={16} />
-                        <span>Zrušiť</span>
-                    </button>
-                    {/* Print Approval Button */}
-                    <button
-                        onClick={async () => {
-                            if (!confirm("Naozaj schváliť túto objednávku do tlače?")) return;
-                            try {
-                                const res = await fetch(`/api/orders/${order.id}/status`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        status: 'READY_FOR_PRINT',
-                                        shopId: order.shopId
-                                    })
-                                });
-                                const data = await res.json();
-                                if (data.success) {
-                                    alert("Objednávka bola schválená do tlače ✅");
-                                    // Refresh logic or redirect could be added here
-                                    window.location.reload();
-                                } else {
-                                    alert("Chyba: " + data.message);
-                                }
-                            } catch (e) {
-                                alert("Chyba spojenia");
-                            }
-                        }}
-                        className={`flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
-                            // Condition: Check if PDF exists (TODO: connect to Agent Job result)
-                            // For now, always enabled for testing logic
-                            true
-                                ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200'
-                                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                            }`}
-                    // disabled={!pdfReady}
-                    >
-                        <CheckCircle2 size={16} />
-                        <span>Schváliť do Tlače</span>
-                    </button>
-                    <button
-                        onClick={async (e) => {
-                            const btn = e.currentTarget;
-                            const originalText = btn.innerText;
-                            btn.innerText = "⏳ Ukladám...";
-                            btn.disabled = true;
+                    {/* PREVIEW COMPONENT (RIGHT COLUMN) */}
+                    <div className="w-full md:w-1/2 bg-slate-900 p-8 flex flex-col justify-center items-center relative overflow-hidden hidden md:flex">
+                        <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-start z-10">
+                            <div className="text-white/50 text-xs font-mono">
+                                {activeItem?.templateKey ? `TEMPLATE: ${activeItem.templateKey}` : 'NO TEMPLATE'}
+                            </div>
+                        </div>
 
-                            // Construct updated items from AI State
-                            // We need to update the FIRST item (usually) with the new data from Smart Editor
-                            // or effectively "Bake" the current view into the order.
+                        {activeItem ? (
+                            <div className="w-full max-w-md aspect-[3/4] bg-white rounded shadow-2xl relative border-[8px] border-white group">
+                                {previews[activeItem.id] ? (
+                                    <img
+                                        src={previews[activeItem.id]}
+                                        alt="Preview"
+                                        className="w-full h-full object-contain bg-slate-100"
+                                    />
+                                ) : (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
+                                        <ImageIcon size={48} className="mb-4 opacity-50" />
+                                        <p className="font-bold text-slate-900">Náhľad pre {activeItem.templateKey}</p>
+                                        <button
+                                            onClick={() => handleGeneratePreview(activeItem.id)}
+                                            disabled={isGenerating[activeItem.id]}
+                                            className="mt-4 px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-black transition-colors"
+                                        >
+                                            Generovať Náhľad
+                                        </button>
+                                    </div>
+                                )}
 
-                            const updatedItems = [...order.items];
-                            if (updatedItems.length > 0) {
-                                // Update the fields of the first item (or relevant item)
-                                // Currently Smart Editor edits `aiData`.
-                                // We need to map `aiData` back to the item structure if we want to save it as "Parsed".
-                                // BUT `aiData` structure (names, date, location, body) is different from `ProcessedItem`.
-                                // `ProcessedItem` has `options` (EPO).
-                                // We should probably update the `options` key-values?
-                                // OR we assume that `ProcessedItem` can hold `parsedResult`.
-
-                                // Simpler approach for now:
-                                // Save the specific AI fields into `options` or a new `parsedData` field if supported?
-                                // The verified data is stored in `orderData` column. 
-                                // Let's just update the item's `options` with the new text for now,
-                                // so when it re-loads, `parseEPO` might see it?
-                                // No, `parseEPO` parses `meta_data` from Woo. We are saving LOCAL override.
-
-                                // So we can save whatever we want in `orderData`.
-                                // Let's save the modified `items` array.
-                                // We need to update the item's properties based on AI Data to reflect "Reality".
-
-                                // For this task, let's assume we just want to "Freeze" the current state.
-                                // But if the user edited text in Smart Editor, where does it go?
-                                // It goes to `aiData.names` etc. 
-                                // We should probably stash this `aiData` into the item so it can be retrieved.
-
-                                updatedItems[0] = {
-                                    ...updatedItems[0],
-                                    isVerified: true,
-                                    aiData: aiData, // Save the editor state!
-                                    // Also update 'name' or 'options' if needed for Print? 
-                                    // The Print Generator uses `options` mostly.
-                                };
-                            }
-
-                            try {
-                                const res = await fetch(`/api/orders/${order.id}`, {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        shopId: order.shopId,
-                                        items: updatedItems,
-                                        isVerified: true
-                                    })
-                                });
-                                const data = await res.json();
-
-                                if (data.success) {
-                                    // Also trigger AI Learning if verified
-                                    await fetch('/api/ai/patterns', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            input: (aiData as any).originalBody || aiData.body,
-                                            output: {
-                                                names: aiData.names,
-                                                location: aiData.location,
-                                                date: aiData.date
-                                            }
-                                        })
-                                    });
-
-                                    btn.innerText = "✅ Uložené!";
-                                    window.location.reload();
-                                } else {
-                                    alert("Chyba: " + data.message);
-                                    btn.innerText = originalText;
-                                    btn.disabled = false;
-                                }
-                            } catch (e) {
-                                console.error(e);
-                                alert("Chyba spojenia");
-                                btn.innerText = originalText;
-                                btn.disabled = false;
-                            }
-                        }}
-                        className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-shadow shadow-sm shadow-blue-200"
-                    >
-                        <Save size={16} />
-                        <span>Uložiť & Synchronizovať</span>
-                    </button>
-                </div>
-            </div>
-
-            <div className="flex-1 grid grid-cols-12 gap-6 overflow-hidden pb-6">
-                {/* Left: Source Text */}
-                <div className="col-span-3 flex flex-col bg-slate-100/50 rounded-2xl border border-slate-200/60 overflow-hidden">
-                    <div className="p-4 border-b border-slate-200 flex items-center gap-2 bg-white/50">
-                        <FileText size={16} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Zdrojové dáta</span>
-                    </div>
-                    <div className="flex-1 p-6 overflow-y-auto">
-                        <div className="prose prose-sm text-slate-600 leading-relaxed font-mono text-[13px] bg-white p-4 rounded-xl border border-slate-200">
-                            <strong>Zákazník:</strong> {order.customer} <br />
-                            <strong>E-mail:</strong> {order.billing?.email || 'Nezadaný'} <br /><br />
-
-                            {order.items?.map((item: any) => (
-                                <div key={item.id} className="mb-4 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-                                    <p className="font-bold text-slate-900 mb-1">• {item.name}</p>
-
-                                    {/* Display all raw options (EPO) */}
-                                    {item.options && Object.entries(item.options).length > 0 ? (
-                                        <div className="bg-slate-50 rounded border border-slate-100 mt-2 overflow-hidden">
-                                            {/* Download Buttons for Uploads */}
-                                            {item.downloads && item.downloads.length > 0 && (
-                                                <div className="p-2 bg-blue-50 border-b border-blue-100 flex flex-col gap-1">
-                                                    {item.downloads.map((dl: any, idx: number) => (
-                                                        <a
-                                                            key={idx}
-                                                            href={dl.url}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="flex items-center justify-between gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold hover:bg-blue-700 transition-colors shadow-sm"
-                                                        >
-                                                            <div className="flex items-center gap-2">
-                                                                <Play size={12} className="rotate-90" />
-                                                                <span>STIAHNUŤ: {dl.label}</span>
-                                                            </div>
-                                                        </a>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            {Object.entries(item.options)
-                                                .filter(([key]) => key !== 'downloads')
-                                                .map(([key, val]) => (
-                                                    <div key={key} className="group flex flex-col border-b border-slate-100 last:border-0 p-2 hover:bg-slate-100 transition-colors">
-                                                        <div className="flex justify-between items-center mb-1">
-                                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{key}</span>
-                                                            <button
-                                                                onClick={() => navigator.clipboard.writeText(typeof val === 'object' ? JSON.stringify(val) : String(val))}
-                                                                className="opacity-0 group-hover:opacity-100 text-[9px] text-blue-500 hover:text-blue-700 px-1"
-                                                                title="Kopírovať"
-                                                            >
-                                                                COPY
-                                                            </button>
-                                                        </div>
-                                                        <div className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed font-medium">
-                                                            {typeof val === 'object' && val !== null && 'url' in (val as any) ? (
-                                                                <div className="mt-1 p-2 bg-blue-50 border border-blue-100 rounded flex items-center gap-2">
-                                                                    <a href={(val as any).url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline flex items-center gap-1 font-medium">
-                                                                        <span>📎</span> Stiahnuť {(val as any).name || 'súbor'}
-                                                                    </a>
-                                                                </div>
-                                                            ) : (
-                                                                <span>{String(val)}</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-slate-400 italic mt-1">Žiadne extra dáta</p>
-                                    )}
-
-                                    {/* Raw Metadata Dump (Collapsible) */}
-                                    <details className="mt-2 group">
-                                        <summary className="text-[9px] font-bold text-slate-300 cursor-pointer hover:text-blue-500 uppercase tracking-widest list-none flex items-center gap-1">
-                                            <span className="group-open:rotate-90 transition-transform">▶</span>
-                                            DEBUG: SUROVÉ DÁTA (RAW)
-                                        </summary>
-                                        <div className="bg-slate-900 rounded p-2 mt-1 overflow-x-auto text-left">
-                                            {item.rawMetaData?.map((meta: any, idx: number) => (
-                                                <div key={idx} className="border-b border-slate-700/50 pb-2 mb-2 last:border-0 last:pb-0 font-mono">
-                                                    <div className="text-[10px] text-yellow-500 font-bold break-all">
-                                                        {meta.key}
-                                                    </div>
-                                                    <div className="text-[9px] text-slate-300 whitespace-pre-wrap break-words mt-0.5">
-                                                        {typeof meta.value === 'object' || Array.isArray(meta.value)
-                                                            ? JSON.stringify(meta.value, null, 2)
-                                                            : String(meta.value)
-                                                        }
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            <div className="text-[9px] text-slate-500 italic mt-2 text-center">
-                                                Koniec výpisu
-                                            </div>
-                                        </div>
-                                    </details>
+                                <div className="absolute bottom-6 left-0 w-full flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                        onClick={() => handleGeneratePreview(activeItem.id)}
+                                        disabled={isGenerating[activeItem.id]}
+                                        className="px-6 py-2 bg-slate-900 text-white rounded-full text-xs font-bold hover:bg-black transition-colors shadow-xl disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {isGenerating[activeItem.id] ? <RefreshCw className="animate-spin" size={14} /> : <Play size={14} className="text-blue-400" />}
+                                        <span>{previews[activeItem.id] ? 'Pre-generovať' : 'Generovať Náhľad'}</span>
+                                    </button>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Middle: AI Editor */}
-                <div className="col-span-5 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                                <Type size={16} className="text-blue-500" />
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Smart Editor</span>
                             </div>
-
-                            {/* Import from File Button */}
-                            {order.items?.[0]?.downloads && order.items[0].downloads.length > 0 && (
-                                <button
-                                    onClick={async (e) => {
-                                        const btn = e.currentTarget;
-                                        const originalContent = btn.innerHTML;
-                                        btn.innerHTML = "⏳ IMPORTOVANIE...";
-                                        btn.disabled = true;
-
-                                        try {
-                                            const dl = order.items[0].downloads[0];
-                                            const res = await fetch('/api/ai/parse-file', {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({
-                                                    fileUrl: dl.url,
-                                                    fileName: dl.name
-                                                })
-                                            });
-                                            const result = await res.json();
-                                            if (result.success && result.data) {
-                                                setAiData(prev => ({
-                                                    ...prev,
-                                                    names: result.data // result.data contains the newline separated string
-                                                }));
-                                            } else {
-                                                alert("Chyba importu: " + (result.error || "Nepodarilo sa spracovať súbor"));
-                                            }
-                                        } catch (err) {
-                                            console.error("File Import error:", err);
-                                            alert("Chyba spojenia pri importe");
-                                        } finally {
-                                            btn.innerHTML = originalContent;
-                                            btn.disabled = false;
-                                        }
-                                    }}
-                                    className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-600 border border-amber-100 rounded-full text-[9px] font-bold hover:bg-amber-100 transition-colors disabled:opacity-50"
-                                >
-                                    <FileUp size={12} />
-                                    <span>IMPORT ZO SÚBORU</span>
-                                </button>
-                            )}
-                        </div>
-                        <button
-                            onClick={async (e) => {
-                                const btn = e.currentTarget;
-                                const originalText = btn.innerText;
-                                btn.innerText = "⏳ AI PARSUJE...";
-                                btn.disabled = true;
-
-                                try {
-                                    const res = await fetch('/api/ai/parse', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            text: aiData.body,
-                                            options: order.items?.[0]?.options
-                                        })
-                                    });
-                                    const result = await res.json();
-                                    if (result.success && result.data) {
-                                        setAiData(prev => ({
-                                            ...prev,
-                                            names: result.data.names || "",
-                                            location: result.data.location || "",
-                                            date: result.data.date || "",
-                                            body: "" // Clear body to avoid duplication
-                                        }));
-                                    } else {
-                                        const errorMsg = result.error || "Nepodarilo sa parsovať";
-                                        const detailsMsg = result.details ? `\n\nDetaily: ${result.details}` : "";
-                                        alert("AI Chyba: " + errorMsg + detailsMsg);
-                                    }
-                                } catch (err) {
-                                    console.error("AI Parse error:", err);
-                                    alert("Chyba pripojenia k AI");
-                                } finally {
-                                    btn.innerText = originalText;
-                                    btn.disabled = false;
-                                }
-                            }}
-                            className="text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:underline disabled:opacity-50"
-                        >
-                            Pre-parsovať znova
-                        </button>
-                        <button
-                            onClick={async (e) => {
-                                const btn = e.currentTarget;
-                                const originalText = btn.innerText;
-                                btn.innerText = "⏳ Ukladám...";
-
-                                try {
-                                    await fetch('/api/ai/patterns', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            input: (aiData as any).originalBody || aiData.body,
-                                            output: {
-                                                names: aiData.names,
-                                                location: aiData.location,
-                                                date: aiData.date
-                                            }
-                                        })
-                                    });
-                                    btn.innerText = "✅ Uložené!";
-                                    setTimeout(() => btn.innerText = originalText, 2000);
-                                } catch (err) {
-                                    btn.innerText = "❌ Chyba";
-                                    setTimeout(() => btn.innerText = originalText, 2000);
-                                }
-                            }}
-                            className="text-[10px] font-bold text-green-600 uppercase tracking-widest hover:underline ml-4"
-                            title="Uložiť aktuálne dáta ako vzor pre AI"
-                        >
-                            🎓 Učiť AI
-                        </button>
+                        ) : (
+                            <div className="text-white/30 font-bold">Žiadny náhľad</div>
+                        )}
                     </div>
-                    <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mená / Hlavný text</label>
-                            <input
-                                type="text"
-                                value={aiData.names}
-                                onChange={(e) => setAiData({ ...aiData, names: e.target.value })}
-                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Dátum</label>
-                            <input
-                                type="text"
-                                value={aiData.date}
-                                onChange={(e) => setAiData({ ...aiData, date: e.target.value })}
-                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Miesto</label>
-                            <input
-                                type="text"
-                                value={aiData.location}
-                                onChange={(e) => setAiData({ ...aiData, location: e.target.value })}
-                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hlavný blok (TEXT_CONTENT)</label>
-                            <textarea
-                                rows={4}
-                                value={aiData.body}
-                                onChange={(e) => setAiData({ ...aiData, body: e.target.value })}
-                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all resize-none"
-                            />
-                        </div>
-                    </div>
-                    <div className="p-4 bg-slate-50 border-t border-slate-100">
-                        <button className="w-full flex items-center justify-center gap-2 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors">
-                            <Play size={16} className="text-blue-400" />
-                            <span>Generovať náhľad (Photoshop)</span>
-                        </button>
-                    </div>
-                </div>
 
-                {/* Right: Preview */}
-                <div className="col-span-4 flex flex-col bg-slate-900 rounded-2xl overflow-hidden relative group">
-                    <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/5 backdrop-blur-md absolute top-0 left-0 w-full z-10 transition-opacity opacity-0 group-hover:opacity-100">
-                        <div className="flex items-center gap-2">
-                            <ImageIcon size={16} className="text-blue-400" />
-                            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Náhľad grafiky</span>
-                        </div>
-                        <button className="p-2 border border-white/10 rounded-lg hover:bg-white/10 text-white">
-                            <Maximize2 size={14} />
-                        </button>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center p-8">
-                        <div className="w-full aspect-[3/4] bg-white rounded shadow-2xl overflow-hidden relative border-[12px] border-white ring-1 ring-slate-800">
-                            {/* Placeholder for Preview */}
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 text-center px-10">
-                                <ScanSearch size={48} className="mb-4 opacity-50" />
-                                <p className="text-sm font-bold text-slate-900">Náhľad zatiaľ nie je vygenerovaný</p>
-                                <p className="text-[10px] uppercase tracking-widest mt-2">Kliknite na 'Generovať náhľad'</p>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
-        </div >
+        </div>
     );
 }
