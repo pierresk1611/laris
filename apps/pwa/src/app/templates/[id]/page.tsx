@@ -42,7 +42,8 @@ const AVAILABLE_META_FIELDS = [
     'BODY_FULL',
     'QUOTE_TOP',
     'QUOTE_BOTTOM',
-    'INVITE_TEXT'
+    'INVITE_TEXT',
+    'FOOTER_TEXT'
 ];
 
 export default function TemplateDetailPage() {
@@ -172,8 +173,14 @@ export default function TemplateDetailPage() {
 
     const handleSaveMapping = async () => {
         const mappingData: Record<string, string> = {};
+        let totalTextLayers = 0;
         layers.forEach(l => {
-            if (l.mappedTo) mappingData[l.name] = l.mappedTo;
+            if (l.type === 'TEXT') {
+                totalTextLayers++;
+                if (l.mappedTo && l.mappedTo !== 'IGNORE') {
+                    mappingData[l.name] = l.mappedTo;
+                }
+            }
         });
 
         // Ensure key is perfectly decoded (e.g. from %20 to space)
@@ -185,7 +192,8 @@ export default function TemplateDetailPage() {
             body: JSON.stringify({
                 key: keyId,
                 variantType: activeVariantType,
-                mappingData
+                mappingData,
+                totalTextLayers
             })
         }).then(async res => {
             const data = await res.json();
@@ -423,24 +431,32 @@ export default function TemplateDetailPage() {
                                             </div>
 
                                             <div className="flex items-center gap-4">
-                                                <select
-                                                    className="pl-4 pr-10 py-2 bg-slate-100 border-none rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
-                                                    value={layer.mappedTo || ''}
-                                                    onChange={(e) => {
-                                                        const newLayers = [...layers];
-                                                        newLayers[idx].mappedTo = e.target.value;
-                                                        setLayers(newLayers);
-                                                    }}
-                                                >
-                                                    <option value="">Nenamapované</option>
-                                                    {AVAILABLE_META_FIELDS.map(mf => (
-                                                        <option key={mf} value={mf}>{mf}</option>
-                                                    ))}
-                                                </select>
-                                                {layer.mappedTo ? (
-                                                    <CheckCircle2 className="text-green-500" size={20} />
+                                                {layer.type !== 'TEXT' ? (
+                                                    <div className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-400 cursor-not-allowed select-none">
+                                                        Ignorované (Grafika)
+                                                    </div>
                                                 ) : (
-                                                    <AlertCircle className="text-slate-200" size={20} />
+                                                    <>
+                                                        <select
+                                                            className="pl-4 pr-10 py-2 bg-slate-100 border-none rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
+                                                            value={layer.mappedTo || ''}
+                                                            onChange={(e) => {
+                                                                const newLayers = [...layers];
+                                                                newLayers[idx].mappedTo = e.target.value;
+                                                                setLayers(newLayers);
+                                                            }}
+                                                        >
+                                                            <option value="">Nenamapované</option>
+                                                            {AVAILABLE_META_FIELDS.map(mf => (
+                                                                <option key={mf} value={mf}>{mf}</option>
+                                                            ))}
+                                                        </select>
+                                                        {layer.mappedTo && layer.mappedTo !== 'IGNORE' ? (
+                                                            <CheckCircle2 className="text-green-500" size={20} />
+                                                        ) : (
+                                                            <AlertCircle className="text-slate-200" size={20} />
+                                                        )}
+                                                    </>
                                                 )}
                                             </div>
                                         </div>

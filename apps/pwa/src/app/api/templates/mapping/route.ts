@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const { key, variantType, mappingData } = await request.json();
+        const { key, variantType, mappingData, totalTextLayers } = await request.json();
 
         if (!key) return NextResponse.json({ success: false, error: 'Key required' }, { status: 400 });
 
@@ -49,16 +49,32 @@ export async function POST(request: Request) {
             existingVariants[targetVariantIndex].mapping = mappingData;
         }
 
-        const hasMappings = Object.keys(mappingData || {}).length > 0;
+        const mappedCount = Object.keys(mappingData || {}).length;
 
-        let allUnmapped = true;
-
-        // Very basic aggregate status check. 
-        if (hasMappings || existingVariants.some(v => Object.keys(v.mapping || {}).length > 0)) {
-            allUnmapped = false;
+        let currentVariantStatus = 'ERROR';
+        if (totalTextLayers !== undefined) {
+            if (mappedCount >= totalTextLayers && totalTextLayers > 0) {
+                currentVariantStatus = 'ACTIVE';
+            } else if (mappedCount > 0) {
+                currentVariantStatus = 'NEEDS_REVIEW';
+            }
+        } else {
+            currentVariantStatus = mappedCount > 0 ? 'ACTIVE' : 'ERROR';
         }
 
-        const finalStatus = allUnmapped ? 'ERROR' : 'ACTIVE';
+        let allUnmapped = true;
+        existingVariants.forEach((v, index) => {
+            if (index !== targetVariantIndex) {
+                const vMappedCount = Object.keys(v.mapping || {}).length;
+                if (vMappedCount > 0) allUnmapped = false;
+            }
+        });
+        if (mappedCount > 0) allUnmapped = false;
+
+        let finalStatus = currentVariantStatus;
+        if (currentVariantStatus === 'ERROR' && !allUnmapped) {
+            finalStatus = 'NEEDS_REVIEW';
+        }
 
         const updatedTemplate = await prisma.template.upsert({
             where: { key },

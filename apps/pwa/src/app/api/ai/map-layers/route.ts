@@ -13,7 +13,8 @@ const AVAILABLE_META_FIELDS = [
     'BODY_FULL',
     'QUOTE_TOP',
     'QUOTE_BOTTOM',
-    'INVITE_TEXT'
+    'INVITE_TEXT',
+    'FOOTER_TEXT'
 ];
 
 export async function POST(req: Request) {
@@ -49,8 +50,9 @@ PRAVIDLÁ:
 6. Názvy ako "Text Oznámenia", "Srdečne Vás pozývame" -> BODY_FULL
 7. Názvy ako "Citát", "Motto" -> QUOTE_TOP alebo QUOTE_BOTTOM
 8. Názvy ako "Pozvánka k stolu", "Prijmite pozvanie" -> INVITE_TEXT
-9. Grafické vrstvy, pozadia (Background, Kvety, Zlato) alebo technické vrstvy (Group 1, Layer 2) nechaj ako null.
-10. Tvoja odpoveď MUSÍ BYŤ LEN VALIDNÝ JSON vo formáte objektu, kde klúč je presný názov vrstvy (z PSD) a hodnota je presný názov meta-poľa (alebo null). Nepíšte žiadne komentáre ani markdown.`;
+9. Názvy ako "Pätička", "RSVP", "Kontakt", "FOOTER_CONTENT" -> FOOTER_TEXT
+10. Ak dostaneš na namapovanie vrstvu s názvom obsahujúcim 'BG', 'BACKGROUND', 'POZADIE' alebo ide o grafický element, vráť pre ňu hodnotu 'IGNORE'. Tieto vrstvy nepotrebujeme mapovať.
+11. Tvoja odpoveď MUSÍ BYŤ LEN VALIDNÝ JSON vo formáte objektu, kde klúč je presný názov vrstvy (z PSD) a hodnota je presný názov meta-poľa (alebo 'IGNORE'/null). Nepíšte žiadne komentáre ani markdown.`;
 
         const completion = await groq.chat.completions.create({
             messages: [{ role: "system", content: systemPrompt }],
@@ -93,14 +95,28 @@ PRAVIDLÁ:
         const totalTextLayers = layers.filter(l => l.type === 'TEXT').length;
         const mappedTextLayers = Object.keys(finalMapping).length;
 
-        let allUnmapped = true;
-
-        // Aggregate status check
-        if (hasMappings || existingVariants.some(v => Object.keys(v.mapping || {}).length > 0)) {
-            allUnmapped = false;
+        let currentVariantStatus = 'ERROR';
+        if (mappedTextLayers >= totalTextLayers && totalTextLayers > 0) {
+            currentVariantStatus = 'ACTIVE';
+        } else if (mappedTextLayers > 0) {
+            currentVariantStatus = 'NEEDS_REVIEW';
+        } else if (totalTextLayers === 0 && mappedTextLayers === 0) {
+            currentVariantStatus = 'ACTIVE';
         }
 
-        const newStatus = allUnmapped ? 'ERROR' : 'ACTIVE';
+        let allUnmapped = true;
+        existingVariants.forEach((v, index) => {
+            if (index !== targetVariantIndex) {
+                const vMappedCount = Object.keys(v.mapping || {}).length;
+                if (vMappedCount > 0) allUnmapped = false;
+            }
+        });
+        if (mappedTextLayers > 0) allUnmapped = false;
+
+        let newStatus = currentVariantStatus;
+        if (currentVariantStatus === 'ERROR' && !allUnmapped) {
+            newStatus = 'NEEDS_REVIEW';
+        }
 
         const template = await prisma.template.update({
             where: { key: templateId },
