@@ -44,7 +44,7 @@ interface InboxItem {
     createdAt: string;
 }
 
-const ThumbnailViewer = ({ path, extension }: { path: string, extension: string }) => {
+const ThumbnailViewer = ({ path, extension, className }: { path: string, extension: string, className?: string }) => {
     const [imgSrc, setImgSrc] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -89,9 +89,12 @@ const ThumbnailViewer = ({ path, extension }: { path: string, extension: string 
         }
     };
 
+    const defaultClass = "w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-slate-200 shadow-sm";
+    const wrapperClass = className || defaultClass;
+
     if (!isThumbnailSupported) {
         return (
-            <div className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border border-slate-100 shadow-sm">
+            <div className={`${wrapperClass} flex items-center justify-center`}>
                 {getFallbackIcon()}
             </div>
         );
@@ -99,7 +102,7 @@ const ThumbnailViewer = ({ path, extension }: { path: string, extension: string 
 
     if (loading) {
         return (
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 animate-pulse border border-slate-200">
+            <div className={`${wrapperClass} flex items-center justify-center animate-pulse`}>
                 <div className="w-full h-full opacity-50 flex items-center justify-center">
                     {getFallbackIcon()}
                 </div>
@@ -108,7 +111,7 @@ const ThumbnailViewer = ({ path, extension }: { path: string, extension: string 
     }
 
     return (
-        <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden shrink-0 border border-slate-200 shadow-sm">
+        <div className={wrapperClass}>
             {imgSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={imgSrc} alt="thumbnail" className="w-full h-full object-cover" />
@@ -489,6 +492,8 @@ export default function TemplatesPage() {
                                         {template.imageUrl ? (
                                             // eslint-disable-next-line @next/next/no-img-element
                                             <img src={template.imageUrl} alt={template.name} className="w-full h-full object-cover" />
+                                        ) : (template as any)._inboxPath ? (
+                                            <ThumbnailViewer path={(template as any)._inboxPath} extension={(template as any)._inboxExt} className="w-full h-full object-cover" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-slate-300">
                                                 <ImageIcon size={32} strokeWidth={1} />

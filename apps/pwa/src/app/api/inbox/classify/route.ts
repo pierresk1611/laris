@@ -28,6 +28,14 @@ export async function POST(req: Request) {
 
             if (existingTemplate) {
                 // Convert existing to active if needed? For now just log
+                // Update imageUrl if it doesn't have one but inbox does
+                // @ts-ignore
+                if (!existingTemplate.imageUrl && inboxItem.thumbnailData) {
+                    await prisma.template.update({
+                        where: { key },
+                        data: { imageUrl: inboxItem.thumbnailData }
+                    });
+                }
             } else {
                 // @ts-ignore
                 await prisma.template.create({
@@ -35,7 +43,8 @@ export async function POST(req: Request) {
                         key: key,
                         name: nameWithoutExt.replace(/_/g, ' '),
                         status: 'ACTIVE', // User explicitly said it's a template
-                        isVerified: false
+                        isVerified: false,
+                        imageUrl: inboxItem.thumbnailData || null
                     }
                 });
             }

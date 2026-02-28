@@ -10,7 +10,32 @@ export async function GET() {
             orderBy: { key: 'asc' }
         });
 
-        return NextResponse.json({ success: true, templates });
+        // Try to attach thumbnails from inbox if missing
+        // @ts-ignore
+        const inboxItems = await prisma.fileInbox.findMany({
+            select: { name: true, path: true, extension: true, thumbnailData: true }
+        });
+
+        const enhancedTemplates = templates.map((t: any) => {
+            if (!t.imageUrl) {
+                // Find matching inbox item that is likely the root template file
+                const match = inboxItems.find((i: any) =>
+                    i.name.includes(t.key) &&
+                    ['.png', '.jpg', '.jpeg', '.ai', '.psd', '.psdt'].includes(i.extension.toLowerCase())
+                );
+
+                if (match) {
+                    if (match.thumbnailData) {
+                        return { ...t, imageUrl: match.thumbnailData };
+                    } else {
+                        return { ...t, _inboxPath: match.path, _inboxExt: match.extension };
+                    }
+                }
+            }
+            return t;
+        });
+
+        return NextResponse.json({ success: true, templates: enhancedTemplates });
     } catch (error) {
         console.error("[TemplatesAPI] Error:", error);
         return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 });
