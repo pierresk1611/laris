@@ -63,39 +63,94 @@ export async function PATCH(req: Request) {
         });
 
         // Trigger side-effects if DONE
-        if (job.status === 'DONE' && job.type === 'SCAN_LAYERS' && job.result) {
+        if (job.status === 'DONE' && (job.type === 'SCAN_LAYERS' || job.type === 'EXTRACT_LAYERS') && job.result) {
             const resultData = job.result as any;
             const layers = resultData.layers || [];
-
-            // Verification Logic
-            const requiredLayers = ['NAME_MAIN', 'DATE_MAIN', 'BODY_FULL'];
-            const hasRequiredLayer = layers.some((l: string) => requiredLayers.includes(l));
-
             const payload = job.payload as any;
-            const templateId = payload.templateId; // We added this in aggregate route
+            const templateId = payload.templateId;
 
             if (templateId) {
-                if (hasRequiredLayer) {
+                // Update template with found layers
+                const totalTextLayers = Array.isArray(layers) ? layers.filter((l: any) => l.type === 'TEXT').length : 0;
+
+                // Fetch template to maintain variants
+                const template = await prisma.template.findUnique({ where: { key: templateId } });
+                // @ts-ignore
+                const existingVariants: any[] = Array.isArray(template?.variants) ? template.variants : [];
+
+                // If it's a simple extraction (not SCAN_LAYERS with verification)
+                if (job.type === 'EXTRACT_LAYERS') {
+                    // Update current variant (default MAIN) with the new layers count for UI feedback
                     await prisma.template.update({
-                        where: { id: templateId },
+                        where: { key: templateId },
                         data: {
-                            isVerified: true,
-                            status: 'ACTIVE',
-                            // We can also store the mapping data if needed
-                            mappingData: { layers }
+                            mappedPaths: totalTextLayers, // Using this as "processed layers" count for initial UI feedback
+                            status: 'NEEDS_REVIEW' // Move from ERROR/UNMAPPED to NEEDS_REVIEW once layers are known
                         }
                     });
-                    console.log(`[JobComplete] Template ${templateId} VERIFIED ✅`);
-                } else {
-                    await prisma.template.update({
-                        where: { id: templateId },
-                        data: {
-                            isVerified: false,
-                            status: 'UNMAPPED',
-                            mappingData: { layers }
-                        }
-                    });
-                    console.log(`[JobComplete] Template ${templateId} UNMAPPED ❌`);
+                } else if (job.type === 'SCAN_LAYERS') {
+                    // Verification Logic (Existing)
+                    const requiredLayers = ['NAME_MAIN', 'DATE_MAIN', 'BODY_FULL'];
+                    const hasRequiredLayer = Array.isArray(layers) && layers.some((l: any) => requiredLayers.includes(typeof l === 'string' ? l : l.name));
+
+                    if (hasRequiredLayer) {
+                        await prisma.template.update({
+                            where: { key: templateId },
+                            data: { isVerified: true, status: 'ACTIVE', mappingData: { layers } }
+                        });
+                    } else {
+                        await prisma.template.update({
+                            where: { key: templateId },
+                            data: { isVerified: false, status: 'UNMAPPED', mappingData: { layers } }
+                        });
+                    }
+                }
+
+                // AI AUTO-MAPPING TRIGGER (For Bulk or Auto-Map flow)
+                if (payload.isBulk || payload.autoMap) {
+                    try {
+                        console.log(`[JobSideEffect] Triggering AI Mapping for ${templateId}...`);
+                        // We call our own AI mapping endpoint internally
+                        const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+                        await fetch(`${baseUrl}/api/ai/map-layers`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                templateId,
+                                layers: layers // The layers we just extracted
+                            })
+                        });
+                    } catch (e) {
+                        console.error(`[JobSideEffect] AI Mapping trigger failed for ${templateId}`, e);
+                    }
+                }
+
+                // PROGRESS UPDATE (For Bulk flow)
+                if (payload.isBulk) {
+                    const progressJson = await getSetting('BULK_MAP_PROGRESS');
+                    if (progressJson) {
+                        const progress = JSON.parse(progressJson);
+                        const newProcessed = progress.processed + 1;
+                        const label = newProcessed >= progress.total
+                            ? 'DOKONČENÉ'
+                            : `KROK 2: AI mapuje vrstvy (${newProcessed}/${progress.total})`;
+
+                        // Use the helper to update
+                        const startTime = new Date().toISOString();
+                        const value = JSON.stringify({
+                            ...progress,
+                            processed: newProcessed,
+                            label,
+                            status: newProcessed >= progress.total ? 'COMPLETED' : 'RUNNING',
+                            updatedAt: startTime
+                        });
+
+                        await prisma.setting.upsert({
+                            where: { id: 'BULK_MAP_PROGRESS' },
+                            update: { value },
+                            create: { id: 'BULK_MAP_PROGRESS', value, category: 'EPHEMERAL', isSecret: false }
+                        });
+                    }
                 }
             }
         }

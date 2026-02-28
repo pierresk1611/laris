@@ -73,6 +73,10 @@ export default function TemplateDetailPage() {
     const [isSavingAlias, setIsSavingAlias] = useState(false);
     const [isAILoading, setIsAILoading] = useState(false);
 
+    const [sku, setSku] = useState<string>('');
+    const [isEditingSku, setIsEditingSku] = useState(false);
+    const [isSavingSku, setIsSavingSku] = useState(false);
+
     // Load existing mapping from DB
     useEffect(() => {
         const loadMapping = async () => {
@@ -81,6 +85,7 @@ export default function TemplateDetailPage() {
                 const data = await res.json();
                 if (data.success) {
                     if (data.alias) setAlias(data.alias);
+                    if (data.sku) setSku(data.sku);
 
                     let loadedVariants = data.variants || [];
                     if (loadedVariants.length === 0 && data.mapping) {
@@ -136,6 +141,29 @@ export default function TemplateDetailPage() {
             toast.error("Nepodarilo sa uložiť");
         } finally {
             setIsSavingAlias(false);
+        }
+    };
+
+    const handleSaveSku = async () => {
+        setIsSavingSku(true);
+        try {
+            const keyId = decodeURIComponent(params.id as string);
+            const res = await fetch('/api/templates/sku', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: keyId, newSku: sku })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("SKU šablóny bolo pripravené");
+                setIsEditingSku(false);
+            } else {
+                toast.error(data.error || "Chyba pri ukladaní SKU");
+            }
+        } catch (e) {
+            toast.error("Nepodarilo sa uložiť SKU");
+        } finally {
+            setIsSavingSku(false);
         }
     };
 
@@ -334,9 +362,40 @@ export default function TemplateDetailPage() {
                                         </button>
                                     </div>
                                 )}
-                                <p className="text-sm font-medium text-slate-500">
-                                    PSD Šablóna {alias ? <span className="ml-1 opacity-50 px-2 rounded bg-slate-100 text-[10px] uppercase">SKU: {decodeURIComponent(params.id as string)}</span> : ''}
-                                </p>
+                                <div className="space-y-1">
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                        Kľúč: {decodeURIComponent(params.id as string)}
+                                    </p>
+                                    {isEditingSku ? (
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                autoFocus
+                                                value={sku}
+                                                onChange={e => setSku(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleSaveSku()}
+                                                className="text-sm font-black text-purple-600 border-b-2 border-purple-500 bg-purple-50/50 outline-none w-32 px-1"
+                                                placeholder="Zadajte SKU..."
+                                                disabled={isSavingSku}
+                                            />
+                                            <button onClick={handleSaveSku} disabled={isSavingSku} className="text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-colors">
+                                                <Check size={16} />
+                                            </button>
+                                            <button onClick={() => setIsEditingSku(false)} disabled={isSavingSku} className="text-slate-400 hover:bg-slate-50 p-1.5 rounded-lg transition-colors">
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div
+                                            className="flex items-center gap-2 group/sku cursor-pointer w-fit"
+                                            onClick={() => setIsEditingSku(true)}
+                                        >
+                                            <span className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border transition-all ${sku ? 'text-purple-600 bg-purple-50 border-purple-100 shadow-sm shadow-purple-50/50' : 'text-slate-400 bg-slate-50 border-slate-100'}`}>
+                                                {sku ? `SKU: ${sku}` : 'Pridať SKU e-shopu'}
+                                            </span>
+                                            <Edit2 size={12} className="text-slate-300 opacity-0 group-hover/sku:opacity-100 transition-opacity" />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 

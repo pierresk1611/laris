@@ -24,6 +24,7 @@ model Shop {
 model Template {
   id           String   @id @default(cuid())
   key          String   @unique // e.g., JSO 15
+  sku          String?  @unique // WooCommerce SKU
   name         String
   mappedPaths  Int      @default(0)
   mappingData  Json?    // Stores the PSD layer to field mappings

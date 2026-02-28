@@ -49,9 +49,16 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
             return [];
         });
 
-        const templateMap = new Map(templates.map((t: any) => [
+        // Map by Key (Legacy/Regex fallback)
+        const templateMap = new Map((templates as any[]).map((t: any) => [
             t.key?.toUpperCase() || "UNKNOWN",
-            { id: t.id, isVerified: t.isVerified }
+            { id: t.id, isVerified: t.isVerified, key: t.key }
+        ]));
+
+        // Map by SKU (Native/Golden Key)
+        const skuMap = new Map((templates as any[]).filter(t => t.sku).map((t: any) => [
+            t.sku.toUpperCase(),
+            { id: t.id, isVerified: t.isVerified, key: t.key }
         ]));
 
         return rawOrders.map(order => {
@@ -101,9 +108,17 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                 const items = (order.line_items || []).flatMap((item: any) => {
                     if (!item) return [];
 
-                    // Naming Convention v2: Try to extract from SKU first (e.g. 2026001), fallback to Name
-                    const templateKey = extractTemplateKey(item.name || "", item.sku || "");
-                    const templateInfo = templateKey ? templateMap.get(templateKey) : null;
+                    // 1. Naming Convention v2: Try to match by SKU from WooCommerce directly (THE GOLDEN KEY)
+                    const itemSku = (item.sku || "").toString().trim().toUpperCase();
+                    let templateInfo: { id: string, isVerified: boolean, key: string } | null | undefined = itemSku ? (skuMap.get(itemSku) as any) : null;
+                    let templateKey = templateInfo ? templateInfo.key : null;
+
+                    // 2. Fallback to Regex parser if SKU didn't match
+                    if (!templateInfo) {
+                        templateKey = extractTemplateKey(item.name || "", (item.sku || "").toString());
+                        templateInfo = templateKey ? (templateMap.get(templateKey.toUpperCase()) as any) : null;
+                    }
+
                     const metaData = item.meta_data || [];
                     const epo = parseEPO(metaData);
 

@@ -121,17 +121,26 @@ export async function POST(req: Request) {
             // Naming Convention v2: ad_[SKU]_[O/P]_[Name].psd
             const nameWithoutExt = name.substring(0, name.lastIndexOf('.'));
 
-            let potentialKey = nameWithoutExt.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
+            // Extract SKU if present in format "SKU: xxx" or "SKU_xxx"
+            let extractedSku: string | null = null;
+            const skuMatch = nameWithoutExt.match(/SKU[:_]\s*([a-zA-Z0-9_-]+)/i);
+            if (skuMatch) {
+                extractedSku = skuMatch[1].trim();
+            }
+
+            // Clean name for key/display (remove SKU part)
+            const cleanNameForMatch = nameWithoutExt.replace(/SKU[:_]\s*[a-zA-Z0-9_-]+/i, '').trim();
+
+            let potentialKey = cleanNameForMatch.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
 
             // Regex Match pre nový formát: ^ad_(.*?)_([OP])_(.*)$
-            const v2Match = nameWithoutExt.match(/^ad_(.*?)_([OP])_(.*)$/i);
+            const v2Match = cleanNameForMatch.match(/^ad_(.*?)_([OP])_(.*)$/i);
 
             // Fallback Match pre staršie formáty (s podtržníkom): napr. 2022_18_P alebo 2023_31_O
-            const oldMatch = nameWithoutExt.match(/^(.*?)_([OP])$/i);
+            const oldMatch = cleanNameForMatch.match(/^(.*?)_([OP])$/i);
 
             // Aggressive Match pre staré formáty bez podtržníka: napr. NO34P, NO34O
-            // This regex says: starts with characters, and ends with exactly O or P (case insensitive)
-            const aggressiveMatch = nameWithoutExt.match(/^([A-Z0-9_-]+?)([OP])$/i);
+            const aggressiveMatch = cleanNameForMatch.match(/^([A-Z0-9_-]+?)([OP])$/i);
 
             let variantType = 'MAIN';
 
@@ -171,7 +180,11 @@ export async function POST(req: Request) {
 
                     await prisma.template.update({
                         where: { key: potentialKey },
-                        data: { variants: existingVariants }
+                        data: {
+                            variants: existingVariants,
+                            // If we found a specific SKU in filename and template doesn't have it, update it
+                            ...(extractedSku && !existingTemplate.sku ? { sku: extractedSku } : {})
+                        }
                     });
                 }
 
@@ -194,7 +207,7 @@ export async function POST(req: Request) {
                 // @ts-ignore
                 await prisma.fileInbox.create({
                     data: {
-                        name: name,
+                        name: name.replace(/SKU[:_]\s*[a-zA-Z0-9_-]+/i, '').trim(),
                         path: pathDisplay,
                         extension: extension,
                         status: 'UNCLASSIFIED',

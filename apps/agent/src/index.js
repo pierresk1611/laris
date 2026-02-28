@@ -48,7 +48,7 @@ async function sendHeartbeat() {
 async function fetchPendingJob() {
     try {
         const response = await axios.get(`${API_URL}/agent/jobs`, {
-            params: { status: 'PENDING' },
+            params: { status: 'PENDING', type: 'STATUS_PRINT_READY' },
             headers: { 'Authorization': `Bearer ${AGENT_TOKEN}` }
         });
 
@@ -72,9 +72,13 @@ async function processJob(job) {
     // 1. Mark as PROCESSING
     await updateJobStatus(job.id, 'PROCESSING', { message: 'Agent started processing' });
 
+
     try {
         if (job.type === 'SCAN_LAYERS') {
             await processLayerScan(job);
+        } else if (job.type === 'SYSTEM_SCAN') {
+            const { processSystemScan } = require('./lib/system-scan');
+            await processSystemScan(job);
         } else {
             // Default to Photoshop for RENDER_PSD, MERGE_SHEET, etc.
             await processPhotoshopJob(job);
@@ -86,6 +90,7 @@ async function processJob(job) {
         isProcessing = false;
     }
 }
+
 
 // --- LAYER SCAN (Node.js native) ---
 async function processLayerScan(job) {
@@ -223,11 +228,42 @@ async function processPhotoshopJob(job) {
     const wrapperScriptPath = path.join(os.tmpdir(), `run_job_${job.id}.jsx`);
     const wrapperContent = `
         #include "${scriptPath}"
-        main("${payloadPath.replace(/\\/g, '\\\\')}"); 
+        try {
+            main("${payloadPath.replace(/\\/g, '\\\\')}"); 
+        } catch(e) {
+            var f = new File("${payloadPath.replace(/\\/g, '\\\\')}".replace("job_", "error_"));
+            f.open("w"); f.write(JSON.stringify({status:"ERROR", message: e.toString()})); f.close();
+        }
     `;
     await fs.writeFile(wrapperScriptPath, wrapperContent);
 
+    // AppleScript Protective Cleanup (Closes any open document to prevent conflicts)
+    console.log(`[Job ${job.id}] Cleaning up workspace (Closing any open documents)...`);
+    const appleScript = `
+        try
+            tell application "${PHOTOSHOP_APP_NAME}"
+                if it is running then
+                    close every document saving no
+                end if
+            end tell
+        end try
+    `;
+
+    try {
+        await new Promise((resolve) => {
+            exec(`osascript -e '${appleScript}'`, (err) => {
+                // Ignore errors (e.g., if PS is busy or has a modal, it might fail, but we try)
+                resolve();
+            });
+        });
+    } catch (e) { }
+
     // Execute
+    console.log(`[Job ${job.id}] Executing task: Spracovávam ${payload.items.length} položiek...`);
+    payload.items.forEach((it, idx) => {
+        console.log(`  -> Položka ${idx + 1} z ${payload.items.length}: ${it.id}`);
+    });
+
     const command = `open -a "${PHOTOSHOP_APP_NAME}" "${wrapperScriptPath}"`;
     exec(command);
 
@@ -235,7 +271,7 @@ async function processPhotoshopJob(job) {
     const resultFile = path.join(os.tmpdir(), `result_${job.id}.json`);
     const errorFile = path.join(os.tmpdir(), `error_${job.id}.json`);
 
-    console.log(`[Job ${job.id}] Waiting for Photoshop to finish...`);
+    console.log(`[Job ${job.id}] Waiting for Photoshop to finish (Timeout: 2 mins)...`);
 
     const result = await waitForFile(resultFile, errorFile, 120000); // 2 min timeout
 

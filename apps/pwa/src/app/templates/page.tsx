@@ -28,6 +28,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 
 interface Template {
     key: string;
+    sku?: string | null;
     name: string;
     mappedPaths: number;
     status: string;
@@ -142,6 +143,7 @@ export default function TemplatesPage() {
     const [lastSync, setLastSync] = useState<{ date: string; status: string } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isBulkMapping, setIsBulkMapping] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState<{ percentage: number, label: string, status: string } | null>(null);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -187,13 +189,15 @@ export default function TemplatesPage() {
 
     const [syncProgress, setSyncProgress] = useState<{ percentage: number, label: string } | null>(null);
     const [aiProgress, setAiProgress] = useState<{ percentage: number, label: string } | null>(null);
+    const [bulkMapProgress, setBulkMapProgress] = useState<{ percentage: number, label: string, status: string } | null>(null);
 
     useEffect(() => {
         fetchData();
 
         // Polling for progress
         const interval = setInterval(async () => {
-            if (!isSyncing && !isAnalyzing) return; // Only poll if active
+            // Poll if anything is active OR if we have an active bulk mapping status
+            if (!isSyncing && !isAnalyzing && !isBulkMapping) return;
 
             try {
                 const res = await fetch('/api/progress');
@@ -202,14 +206,29 @@ export default function TemplatesPage() {
                 if (data.success) {
                     if (data.sync) setSyncProgress(data.sync);
                     if (data.ai) setAiProgress(data.ai);
+
+                    // Handle bulk map progress specially
+                    if (data.bulkMap) {
+                        setBulkMapProgress(data.bulkMap);
+                        if (data.bulkMap.status === 'COMPLETED') {
+                            setIsBulkMapping(false);
+                            fetchData();
+                        } else {
+                            setIsBulkMapping(true);
+                            // Refresh templates list during bulk process to see live changes
+                            fetch('/api/templates').then(r => r.json()).then(d => {
+                                if (d.success) setTemplates(d.templates);
+                            });
+                        }
+                    }
                 }
             } catch (e) {
                 console.error("Progress poll failed", e);
             }
-        }, 1000);
+        }, 2000);
 
         return () => clearInterval(interval);
-    }, [fetchData, isSyncing, isAnalyzing]);
+    }, [fetchData, isSyncing, isAnalyzing, isBulkMapping]);
 
     const handleDropboxSync = async () => {
         setIsSyncing(true);
@@ -319,35 +338,29 @@ export default function TemplatesPage() {
 
     const handleBulkMapping = async () => {
         setIsBulkMapping(true);
-        const unmappedTemplates = templates.filter(t => t.status === 'ERROR' || t.status === 'NEEDS_REVIEW' || t.status === 'UNMAPPED' || !t.mappedPaths || t.mappedPaths === 0);
+        setBulkMapProgress({ percentage: 0, label: 'ŠTARTUJAM...', status: 'RUNNING' });
 
-        if (unmappedTemplates.length === 0) {
-            toast.info("Zoznam je čistý. Žiadna šablóna nevyžaduje hromadné mapovanie.");
+        try {
+            const res = await fetch('/api/templates/bulk-process', { method: 'POST' });
+            const data = await res.json();
+
+            if (!data.success) {
+                throw new Error(data.error || 'Chyba pri štarte hromadného procesu.');
+            }
+
+            if (data.message === 'No templates need mapping') {
+                toast.info("Všetky aktívne šablóny sú už namapované.");
+                setIsBulkMapping(false);
+                setBulkMapProgress(null);
+                return;
+            }
+
+            toast.success(`Hromadný proces spustený pre ${data.total} šablón.`);
+        } catch (e: any) {
+            toast.error(e.message || "Nepodarilo sa spustiť hromadné mapovanie.");
             setIsBulkMapping(false);
-            return;
+            setBulkMapProgress(null);
         }
-
-        toast.loading(`Spracovávam ${unmappedTemplates.length} šablón. Posielam agentovi...`, { id: 'bulk-map' });
-
-        let successCount = 0;
-        for (const tpl of unmappedTemplates) {
-            try {
-                await fetch('/api/agent/jobs', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        type: 'EXTRACT_LAYERS',
-                        payload: { templateId: tpl.key }
-                    })
-                });
-                successCount++;
-            } catch (e) { console.error(`Failed queuing extraction for ${tpl.key}`, e) }
-        }
-
-        toast.dismiss('bulk-map');
-        toast.info(`Šablóny najprv musí prečítať Agent. Čakám na extrakciu vrstiev pre ${successCount} položiek.`, { duration: 5000 });
-        setIsBulkMapping(false);
-        fetchData();
     };
 
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -394,6 +407,15 @@ export default function TemplatesPage() {
                             progress={aiProgress.percentage}
                             label={aiProgress.label}
                             colorClass="bg-purple-600"
+                        />
+                    </div>
+                )}
+                {bulkMapProgress && (
+                    <div className="flex-1 max-w-sm mx-4">
+                        <ProgressBar
+                            progress={bulkMapProgress.percentage}
+                            label={bulkMapProgress.label}
+                            colorClass="bg-gradient-to-r from-blue-600 to-purple-600"
                         />
                     </div>
                 )}
@@ -570,11 +592,16 @@ export default function TemplatesPage() {
                                                 <h3 className="text-lg font-black text-slate-900 truncate pr-2" title={template.alias || template.name || template.key}>
                                                     {template.alias || template.name || template.key}
                                                 </h3>
-                                                {(template.alias || (template.name && template.name !== template.key)) && (
+                                                <div className="flex flex-col items-end gap-1">
+                                                    {template.sku && (
+                                                        <span className="text-[10px] font-black text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full uppercase tracking-tight shadow-sm border border-purple-100">
+                                                            SKU: {template.sku}
+                                                        </span>
+                                                    )}
                                                     <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase shrink-0">
-                                                        SKU: {template.key}
+                                                        Kľúč: {template.key}
                                                     </span>
-                                                )}
+                                                </div>
                                             </div>
                                             {/* If it has variants, we can show a small badge */}
                                             <div className="flex items-center justify-between mb-6">

@@ -51,7 +51,7 @@ export async function POST(req: Request) {
         // 3. Call AI
         const aiResponse = await groq.chat.completions.create({
             messages: [{ role: 'user', content: prompt }],
-            model: "llama3-70b-8192", // Fast and good reasoning
+            model: "llama-3.3-70b-versatile", // Versatile and good reasoning
             temperature: 0.1,
             response_format: { type: "json_object" }
         });
