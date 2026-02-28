@@ -79,53 +79,49 @@ PRAVIDLÁ:
 
         // Fetch template to update existing variants
         const currentTemplate = await prisma.template.findUnique({ where: { key: templateId } });
-        // @ts-ignore
-        const existingVariants: any[] = Array.isArray(currentTemplate?.variants) ? currentTemplate.variants : [];
+        if (!currentTemplate) throw new Error("Template not found");
 
-        // Target specific variant
+        // Deep clone variants to ensure Prisma detects changes in JSON
+        const existingVariants: any[] = JSON.parse(JSON.stringify(Array.isArray((currentTemplate as any).variants) ? (currentTemplate as any).variants : []));
+
+        // Target variant by type or first one if not specified
         let targetVariantIndex = existingVariants.findIndex(v => v.type === (variantType || 'MAIN'));
-        if (targetVariantIndex === -1 && variantType) {
-            existingVariants.push({ type: variantType, mapping: finalMapping });
+
+        if (targetVariantIndex === -1) {
+            // If no MAIN exists and we are mapping MAIN, or if specific type missing
+            existingVariants.push({
+                type: variantType || 'MAIN',
+                mapping: finalMapping,
+                layers: layers // Store layers structure too if we have it
+            });
             targetVariantIndex = existingVariants.length - 1;
-        } else if (targetVariantIndex !== -1) {
+        } else {
             existingVariants[targetVariantIndex].mapping = finalMapping;
+            // Also preserve/update layers if provided
+            if (layers && layers.length > 0) {
+                existingVariants[targetVariantIndex].layers = layers;
+            }
         }
 
-        // Count total text layers vs mapped to determine status for THIS variant
+        // Calculate status: If all text layers are mapped, it's ACTIVE (READY)
         const totalTextLayers = layers.filter(l => l.type === 'TEXT').length;
         const mappedTextLayers = Object.keys(finalMapping).length;
 
-        let currentVariantStatus = 'ERROR';
-        if (mappedTextLayers >= totalTextLayers && totalTextLayers > 0) {
-            currentVariantStatus = 'ACTIVE';
-        } else if (mappedTextLayers > 0) {
-            currentVariantStatus = 'NEEDS_REVIEW';
-        } else if (totalTextLayers === 0 && mappedTextLayers === 0) {
-            currentVariantStatus = 'ACTIVE';
-        }
-
-        let allUnmapped = true;
-        existingVariants.forEach((v, index) => {
-            if (index !== targetVariantIndex) {
-                const vMappedCount = Object.keys(v.mapping || {}).length;
-                if (vMappedCount > 0) allUnmapped = false;
-            }
-        });
-        if (mappedTextLayers > 0) allUnmapped = false;
-
-        let newStatus = currentVariantStatus;
-        if (currentVariantStatus === 'ERROR' && !allUnmapped) {
-            newStatus = 'NEEDS_REVIEW';
+        let newStatus = 'NEEDS_REVIEW'; // Default
+        if (totalTextLayers > 0 && mappedTextLayers >= totalTextLayers) {
+            newStatus = 'ACTIVE';
+        } else if (totalTextLayers === 0) {
+            newStatus = 'ACTIVE'; // Nothing to map
         }
 
         const template = await prisma.template.update({
             where: { key: templateId },
             data: {
-                // @ts-ignore
-                variants: existingVariants,
+                variants: existingVariants as any,
                 mappedPaths: mappedTextLayers,
-                status: newStatus
-            }
+                status: newStatus,
+                updatedAt: new Date()
+            } as any
         });
 
         return NextResponse.json({

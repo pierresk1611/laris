@@ -578,6 +578,17 @@ export default function TemplatesPage() {
                                                     Overená
                                                 </div>
                                             )}
+                                            {/* SKU & Key Badges on Thumbnail */}
+                                            <div className="absolute bottom-3 left-3 flex flex-col gap-1.5 z-10">
+                                                {template.sku && (
+                                                    <span className="text-[10px] font-black text-white bg-purple-600/90 backdrop-blur-sm px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-lg border border-white/20">
+                                                        SKU: {template.sku}
+                                                    </span>
+                                                )}
+                                                <span className="text-[9px] font-black text-white bg-slate-900/60 backdrop-blur-sm px-2 py-0.5 rounded-md uppercase tracking-widest border border-white/10">
+                                                    Kľúč: {template.key}
+                                                </span>
+                                            </div>
                                         </div>
                                         <div className="p-6 flex flex-col flex-1">
                                             <div className="flex justify-between items-start mb-4">
@@ -592,16 +603,6 @@ export default function TemplatesPage() {
                                                 <h3 className="text-lg font-black text-slate-900 truncate pr-2" title={template.alias || template.name || template.key}>
                                                     {template.alias || template.name || template.key}
                                                 </h3>
-                                                <div className="flex flex-col items-end gap-1">
-                                                    {template.sku && (
-                                                        <span className="text-[10px] font-black text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full uppercase tracking-tight shadow-sm border border-purple-100">
-                                                            SKU: {template.sku}
-                                                        </span>
-                                                    )}
-                                                    <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase shrink-0">
-                                                        Kľúč: {template.key}
-                                                    </span>
-                                                </div>
                                             </div>
                                             {/* If it has variants, we can show a small badge */}
                                             <div className="flex items-center justify-between mb-6">
@@ -620,12 +621,14 @@ export default function TemplatesPage() {
                                                     <span className="text-[10px] font-bold text-slate-500">{template.mappedPaths} polí</span>
                                                 </div>
                                                 <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${template.status === 'ACTIVE' ? 'bg-green-50 text-green-600' :
-                                                    template.status === 'NEEDS_REVIEW' ? 'bg-amber-50 text-amber-600' :
-                                                        'bg-red-50 text-red-600'
+                                                        template.status === 'NEEDS_REVIEW' ? 'bg-amber-50 text-amber-600' :
+                                                            template.status === 'WARNING_NO_PDF' ? 'bg-red-100 text-red-700 animate-pulse border border-red-200' :
+                                                                'bg-red-50 text-red-600'
                                                     }`}>
                                                     {template.status === 'ACTIVE' ? 'Aktívna' :
                                                         template.status === 'NEEDS_REVIEW' ? 'Zdieľaná (Kontrola)' :
-                                                            'Chyba'}
+                                                            template.status === 'WARNING_NO_PDF' ? 'Chyba PDF (.ai)' :
+                                                                'Chyba'}
                                                 </span>
                                             </div>
                                         </div>

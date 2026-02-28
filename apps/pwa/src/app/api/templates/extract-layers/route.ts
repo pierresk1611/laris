@@ -82,8 +82,14 @@ export async function POST(req: Request) {
         });
 
         const extractedLayers = psd.children ? extractLayersRecursive(psd.children) : [];
-        const textLayerCount = extractedLayers.filter(l => l.type === 'TEXT').length;
 
+        // Check for Illustrator PDF compatibility warning
+        const isNoPdfAi = extractedLayers.some(l =>
+            l.name.includes("Adobe Illustrator") ||
+            (l.type === 'TEXT' && l.name.toLowerCase().includes("pdf compatibility"))
+        );
+
+        const textLayerCount = extractedLayers.filter(l => l.type === 'TEXT').length;
         console.log(`[CloudExtract] Found ${extractedLayers.length} layers (${textLayerCount} text).`);
 
         // Update Template variants in DB
@@ -93,15 +99,25 @@ export async function POST(req: Request) {
             layers: extractedLayers
         };
 
+        const finalStatus = isNoPdfAi ? 'WARNING_NO_PDF' : 'NEEDS_REVIEW';
+
         await prisma.template.update({
             where: { key: templateId },
             data: {
                 variants: updatedVariants as any,
-                mappedPaths: textLayerCount, // For legacy UI compatibility or sorting
-                status: 'NEEDS_REVIEW',
+                mappedPaths: textLayerCount,
+                status: finalStatus,
                 updatedAt: new Date()
-            }
+            } as any
         });
+
+        if (isNoPdfAi) {
+            return NextResponse.json({
+                success: false,
+                error: 'Tento AI súbor je treba preuložiť so zapnutým "Create PDF Compatible File".',
+                status: 'WARNING_NO_PDF'
+            });
+        }
 
         // Trigger AI Auto-Map
         try {
