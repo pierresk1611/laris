@@ -26,15 +26,33 @@ model Template {
   key          String   @unique // e.g., JSO 15
   sku          String?  @unique // WooCommerce SKU
   name         String
+  displayName  String?  // Mirka's custom name (alias replacement)
   mappedPaths  Int      @default(0)
   mappingData  Json?    // Stores the PSD layer to field mappings
   status       String   @default("ACTIVE")
   isVerified   Boolean  @default(false)
   imageUrl     String?
-  alias        String?  // Display Name / User customized alias
-  variants     Json?    @default("[]") // Array of { type, path, extension, imageUrl? }
+  alias        String?  // Deprecated: Display Name / User customized alias
+  variants     Json?    @default("[]") // Deprecated: Array of { type, path, extension, imageUrl? }
+  files        TemplateFile[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model TemplateFile {
+  id          String   @id @default(cuid())
+  templateId  String
+  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  type        String   @default("MAIN") // MAIN, INVITE, etc.
+  path        String   // Dropbox path - REQUIRED
+  extension   String?
+  imageUrl    String?
+  layers      Json?    @default("[]") // Extracted layers
+  mapping     Json?    @default("{}") // Layer mapping
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([templateId, type])
 }
 
 model VerifiedTemplate {

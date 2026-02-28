@@ -163,9 +163,39 @@ export async function POST(req: Request) {
             const existingTemplate = await prisma.template.findUnique({ where: { key: finalKey } }) as any;
 
             if (existingTemplate) {
+                // Update Template metadata if needed (displayName, sku)
+                await prisma.template.update({
+                    where: { id: existingTemplate.id },
+                    data: {
+                        sku: existingTemplate.sku || extractedSku,
+                        displayName: existingTemplate.displayName || cleanNameForMatch.replace(/_/g, ' ')
+                    }
+                });
+
+                // Relational Upsert: Ensure the file exists in the dedicated TemplateFile table
+                console.log(`[SYNC] Updating Variant ${variantType} for Template ${finalKey} with Path: ${pathDisplay}`);
+                await prisma.templateFile.upsert({
+                    where: {
+                        templateId_type: {
+                            templateId: existingTemplate.id,
+                            type: variantType
+                        }
+                    },
+                    update: {
+                        path: pathDisplay,
+                        extension: extension
+                    },
+                    create: {
+                        templateId: existingTemplate.id,
+                        type: variantType,
+                        path: pathDisplay,
+                        extension: extension
+                    }
+                });
+
+                // Legacy: Keep variants JSON in sync
                 const existingVariants = Array.isArray(existingTemplate.variants) ? existingTemplate.variants : [];
                 if (!existingVariants.find((v: any) => v.path === pathDisplay)) {
-                    // @ts-ignore
                     existingVariants.push({
                         key: nameWithoutExt,
                         type: variantType,
@@ -173,13 +203,9 @@ export async function POST(req: Request) {
                         extension: extension,
                         mapping: {}
                     });
-
                     await prisma.template.update({
-                        where: { key: finalKey },
-                        data: {
-                            variants: existingVariants,
-                            sku: existingTemplate.sku || extractedSku
-                        } as any
+                        where: { id: existingTemplate.id },
+                        data: { variants: existingVariants }
                     });
                 }
 

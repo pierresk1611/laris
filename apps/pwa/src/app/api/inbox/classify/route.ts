@@ -56,42 +56,91 @@ export async function POST(req: Request) {
             // If we have a SKU, use it as the primary key
             const finalKey = extractedSku || potentialKey;
 
-            const existingTemplate = await prisma.template.findUnique({ where: { key: finalKey } }) as any;
-
-            const newVariant = {
-                key: nameWithoutExt,
-                type: variantType,
-                path: pathDisplay,
-                extension: extension,
-                mapping: {}
-            };
+            const existingTemplate = await prisma.template.findUnique({
+                where: { key: finalKey },
+                include: { files: true }
+            }) as any;
 
             if (existingTemplate) {
-                const existingVariants = Array.isArray(existingTemplate.variants) ? existingTemplate.variants : [];
-                // Check if this path is already there
-                if (!existingVariants.find((v: any) => v.path === pathDisplay)) {
-                    existingVariants.push(newVariant);
+                // Update Template metadata if needed
+                await prisma.template.update({
+                    where: { id: existingTemplate.id },
+                    data: {
+                        imageUrl: existingTemplate.imageUrl || (inboxItem as any).thumbnailData || null,
+                        sku: existingTemplate.sku || extractedSku,
+                        displayName: existingTemplate.displayName || cleanName.replace(/_/g, ' ')
+                    }
+                });
 
+                // Create or Update the specific file variant
+                console.log(`[InboxClassify] Upserting templateFile for ${finalKey} (Type: ${variantType}) with Path: ${pathDisplay}`);
+                await prisma.templateFile.upsert({
+                    where: {
+                        templateId_type: {
+                            templateId: existingTemplate.id,
+                            type: variantType
+                        }
+                    },
+                    update: {
+                        path: pathDisplay,
+                        extension: extension,
+                        imageUrl: (inboxItem as any).thumbnailData || null
+                    },
+                    create: {
+                        templateId: existingTemplate.id,
+                        type: variantType,
+                        path: pathDisplay,
+                        extension: extension,
+                        imageUrl: (inboxItem as any).thumbnailData || null
+                    }
+                });
+
+                // Legacy: Keep variants JSON in sync for now to avoid breaking existing code immediately
+                const existingVariants = Array.isArray(existingTemplate.variants) ? existingTemplate.variants : [];
+                if (!existingVariants.find((v: any) => v.path === pathDisplay)) {
+                    existingVariants.push({
+                        key: nameWithoutExt,
+                        type: variantType,
+                        path: pathDisplay,
+                        extension: extension,
+                        mapping: {}
+                    });
                     await prisma.template.update({
-                        where: { key: finalKey },
-                        data: {
-                            variants: existingVariants as any,
-                            imageUrl: existingTemplate.imageUrl || (inboxItem as any).thumbnailData || null,
-                            sku: existingTemplate.sku || extractedSku
-                        } as any
+                        where: { id: existingTemplate.id },
+                        data: { variants: existingVariants as any }
                     });
                 }
             } else {
-                await prisma.template.create({
+                // Create new Template and its first File
+                const newTemplate = await prisma.template.create({
                     data: {
                         key: finalKey,
                         name: cleanName.replace(/_/g, ' '),
+                        displayName: cleanName.replace(/_/g, ' '), // Initialize displayName
                         sku: extractedSku,
                         status: 'ACTIVE',
                         isVerified: false,
                         imageUrl: (inboxItem as any).thumbnailData || null,
-                        variants: [newVariant] as any
-                    } as any
+                        // Legacy:
+                        variants: [{
+                            key: nameWithoutExt,
+                            type: variantType,
+                            path: pathDisplay,
+                            extension: extension,
+                            mapping: {}
+                        }] as any
+                    }
+                });
+
+                console.log(`[InboxClassify] Creating NEW templateFile for ${finalKey} (Type: ${variantType}) with Path: ${pathDisplay}`);
+                await prisma.templateFile.create({
+                    data: {
+                        templateId: newTemplate.id,
+                        type: variantType,
+                        path: pathDisplay,
+                        extension: extension,
+                        imageUrl: (inboxItem as any).thumbnailData || null
+                    }
                 });
             }
         }

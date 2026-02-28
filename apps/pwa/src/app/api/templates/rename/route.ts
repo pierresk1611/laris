@@ -12,12 +12,15 @@ export async function POST(request: Request) {
         }
 
         // @ts-ignore
-        const template = await prisma.template.update({
+        const updatedTemplate = await prisma.template.update({
             where: { key },
-            data: { alias: newAlias }
+            data: {
+                displayName: newAlias,
+                alias: newAlias // keep for legacy support
+            }
         });
 
-        return NextResponse.json({ success: true, alias: template.alias });
+        return NextResponse.json({ success: true, alias: updatedTemplate.displayName });
     } catch (error: any) {
         console.error("[TemplateRename] Error:", error);
         return NextResponse.json({ success: false, error: 'Nepodarilo sa premenovať šablónu', details: error.message }, { status: 500 });

@@ -11,18 +11,24 @@ export async function GET(request: Request) {
         if (!key) return NextResponse.json({ success: false, error: 'Key required' }, { status: 400 });
 
         const template = await prisma.template.findUnique({
-            where: { key }
+            where: { key },
+            include: { files: true }
         });
 
-        // Vratime cely template aj s variantami
+        // Return full template with relational files mapped to variants format
         return NextResponse.json({
             success: true,
-            // @ts-ignore
-            mapping: template?.mappingData || null, // Legacy / Default
-            // @ts-ignore
-            alias: template?.alias || null,
-            // @ts-ignore
-            variants: template?.variants || []
+            mapping: template?.mappingData || null,
+            alias: template?.displayName || template?.alias || null,
+            displayName: template?.displayName || null,
+            variants: template?.files?.map((f: any) => ({
+                type: f.type,
+                path: f.path,
+                extension: f.extension,
+                imageUrl: f.imageUrl,
+                mapping: f.mapping,
+                layers: f.layers
+            })) || (template as any)?.variants || []
         });
     } catch (error: any) {
         console.error("[TemplateMapping] GET Error:", error);

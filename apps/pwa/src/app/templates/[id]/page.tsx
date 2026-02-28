@@ -85,7 +85,9 @@ export default function TemplateDetailPage() {
                 const res = await fetch(`/api/templates/mapping?key=${encodeURIComponent(params.id as string)}`, { cache: 'no-store' });
                 const data = await res.json();
                 if (data.success) {
-                    if (data.alias) setAlias(data.alias);
+                    // Use displayName (Mirka's custom name) primarily, alias as secondary fallback
+                    const initialName = data.displayName || data.alias || '';
+                    setAlias(initialName);
                     if (data.sku) setSku(data.sku);
 
                     let loadedVariants = data.variants || [];
