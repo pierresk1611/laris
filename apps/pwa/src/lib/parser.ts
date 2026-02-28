@@ -1,10 +1,20 @@
 /**
  * Extracted template key from product title using Regex.
- * Example: "Pozvánka na oslavu 70. narodenín JSO 15" -> "JSO 15"
+ * V2 Logic: Prioritize WooCommerce SKU (kód), fallback to old Regex.
+ * Example SKU: "2026001" -> "2026001"
+ * Example Fallback: "Pozvánka na oslavu 70. narodenín JSO 15" -> "JSO 15"
  */
-export function extractTemplateKey(productName: string): string | null {
+export function extractTemplateKey(productName: string, sku?: string): string | null {
+    // 1. Prioritize SKU match for Naming Convention V2
+    if (sku) {
+        const cleanSku = String(sku).trim();
+        if (cleanSku.length > 0) {
+            return cleanSku.toUpperCase();
+        }
+    }
+
+    // 2. Fallback to old regex for backwards compatibility
     if (!productName) return null;
-    // Regex looks for common patterns like JSO 15, VSO 02, etc.
     const regex = /([A-Z]{3}\s\d{2,3})/i;
     const match = String(productName).match(regex);
     return match ? match[1].toUpperCase() : null;

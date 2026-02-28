@@ -101,7 +101,8 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                 const items = (order.line_items || []).flatMap((item: any) => {
                     if (!item) return [];
 
-                    const templateKey = extractTemplateKey(item.name || "");
+                    // Naming Convention v2: Try to extract from SKU first (e.g. 2026001), fallback to Name
+                    const templateKey = extractTemplateKey(item.name || "", item.sku || "");
                     const templateInfo = templateKey ? templateMap.get(templateKey) : null;
                     const metaData = item.meta_data || [];
                     const epo = parseEPO(metaData);
@@ -141,8 +142,9 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                             id: (item.id || 0) + 999000, // Fake ID to avoid key collision
                             name: `Pozvánka k stolu (${item.name})`,
                             quantity: quantities.invitations,
-                            templateKey: templateKey ? `${templateKey}P` : null, // Invitation usually has suffix 'P'
-                            templateId: templateKey ? templateMap.get(`${templateKey}P`)?.id || null : null,
+                            // Under V2, Invitation shares the exact same Template ID/Key as the Oznámenie.
+                            templateKey: templateKey,
+                            templateId: templateInfo?.id || null,
                             hasInvitation: false, // It IS an invitation
                             isSplitItem: true,
                             material: epo.material // Usually same paper

@@ -107,14 +107,24 @@ export async function POST(req: Request) {
             const extension = name.includes('.') ? name.substring(name.lastIndexOf('.')) : '';
 
             // Check if this file is already a known TEMPLATE (Active)
-            // We use the filename (without ext) as key assumption for check
+            // Naming Convention v2: ad_[SKU]_[O/P]_[Name].psd
             const nameWithoutExt = name.substring(0, name.lastIndexOf('.'));
-            const potentialKey = nameWithoutExt.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
+
+            let potentialKey = nameWithoutExt.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
+
+            // Regex Match pre nový formát: ^ad_(.*?)_([OP])_(.*)$
+            const v2Match = nameWithoutExt.match(/^ad_(.*?)_([OP])_(.*)$/i);
+
+            if (v2Match) {
+                // Kľúčom pre šablónu je teraz stredný kód (SKU)
+                potentialKey = v2Match[1].toUpperCase();
+            }
 
             // Check 1: Is it already an active template?
             const existingTemplate = await prisma.template.findUnique({ where: { key: potentialKey } });
             if (existingTemplate) {
                 // It's already a template, we ignore it for Inbox
+                // Note: v2 grouping happens down the line when mapping or in inbox, but if the key exists, it skips inbox.
                 continue;
             }
 

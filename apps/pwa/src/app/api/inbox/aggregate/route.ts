@@ -26,15 +26,17 @@ export async function POST(req: Request) {
             const ext = item.extension.toLowerCase();
             const basename = name.substring(0, name.lastIndexOf('.'));
 
-            // Normalize basename (e.g. "8 Copy" -> "8")? 
-            // User request: "8.ai" and "8.jpg" -> "8"
-            // Let's stick to strict basename for safety first.
+            // Naming Convention v2 -> ad_[SKU]_[O/P]_[Name]
+            const v2Match = basename.match(/^ad_(.*?)_([OP])_(.*)$/i);
 
-            if (!groups.has(basename)) {
-                groups.set(basename, { source: [], preview: [], others: [] });
+            // Grouping key: either SKU (if V2) or basename (if old format)
+            const groupKey = v2Match ? v2Match[1].toUpperCase() : basename;
+
+            if (!groups.has(groupKey)) {
+                groups.set(groupKey, { source: [], preview: [], others: [] });
             }
 
-            const group = groups.get(basename);
+            const group = groups.get(groupKey);
 
             if (['.ai', '.psd', '.psb', '.pdf'].includes(ext)) {
                 group.source.push(item);
@@ -68,16 +70,22 @@ export async function POST(req: Request) {
             // Template Key sanitation
             const key = basename.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
 
-            // Check existence
-            const existingTemplate = await prisma.template.findUnique({ where: { key } });
+            // Check existence (We use groupKey to check against V2 SKU if matched)
+            const v2MatchForName = basename.match(/^ad_(.*?)_([OP])_(.*)$/i);
+            const templateKeyToCheck = v2MatchForName ? v2MatchForName[1].toUpperCase() : key;
+
+            const existingTemplate = await prisma.template.findUnique({ where: { key: templateKeyToCheck } });
 
             if (!existingTemplate) {
+                // Determine Name - if V2, we might want to use the [Name] part
+                const templateName = v2MatchForName ? v2MatchForName[3].replace(/_/g, ' ') : basename.replace(/_/g, ' ');
+
                 // Create NEW Template
                 // @ts-ignore
                 const newTemplate = await prisma.template.create({
                     data: {
-                        key: key,
-                        name: basename.replace(/_/g, ' '),
+                        key: templateKeyToCheck,
+                        name: templateName,
                         status: 'UNVERIFIED', // Needs Agent Scan
                         isVerified: false,
                         imageUrl: mainPreview ? (await getPublicUrl(mainPreview.path)) : null
