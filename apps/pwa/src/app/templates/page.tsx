@@ -132,12 +132,13 @@ export default function TemplatesPage() {
             let hasMore = true;
             let currentCursor: string | undefined = undefined;
             let totalNewItems = 0;
+            let accumulatedCount = 0;
 
             while (hasMore) {
                 const apiResponse: Response = await fetch('/api/templates/sync', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cursor: currentCursor })
+                    body: JSON.stringify({ cursor: currentCursor, accumulatedCount })
                 });
 
                 const responseData: any = await apiResponse.json();
@@ -148,6 +149,7 @@ export default function TemplatesPage() {
                 hasMore = responseData.hasMore;
                 currentCursor = responseData.cursor;
                 totalNewItems += responseData.count || 0;
+                accumulatedCount += responseData.scannedCount || 0;
             }
 
             return { message: `Sken dokončený. Nájdených ${totalNewItems} nových súborov.` };

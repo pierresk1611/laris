@@ -62,15 +62,20 @@ export async function POST(req: Request) {
         // 3. Fetch files with pagination (Client-driven loop)
         const body = await req.json().catch(() => ({}));
         const cursor = body.cursor;
+        const accumulatedCount = body.accumulatedCount || 0;
 
-        // Initialize Progress immediately
-        await updateProgress('SYNC_PROGRESS', 0, 0, 'Otváram spojenie s Dropboxom...');
+        // Initialize Progress immediately only for the first request
+        if (!cursor) {
+            await updateProgress('SYNC_PROGRESS', 0, 0, 'Otváram spojenie s Dropboxom...');
+        } else {
+            await updateProgress('SYNC_PROGRESS', accumulatedCount, 0, `Sťahujem ďalší blok z Dropboxu... (${accumulatedCount})`);
+        }
 
         let response;
 
         try {
             if (cursor) {
-                console.log("[DropboxSync] Continuing with cursor...");
+                console.log("[DropboxSync] Continuing with cursor...", { accumulatedCount });
                 response = await dbx.filesListFolderContinue({ cursor });
             } else {
                 console.log(`[DropboxSync] Starting new recursive scan in ${folderPath}...`);
@@ -104,7 +109,7 @@ export async function POST(req: Request) {
 
         // 4. Process into FileInbox
         console.log("[DropboxSync] Checkpoint 4: Processing into FileInbox...");
-        let count = 0;
+        let totalCount = accumulatedCount;
         let newInboxItems = 0;
 
         for (const entry of validFiles) {
@@ -129,8 +134,7 @@ export async function POST(req: Request) {
             // Check 1: Is it already an active template?
             const existingTemplate = await prisma.template.findUnique({ where: { key: potentialKey } });
             if (existingTemplate) {
-                // It's already a template, we ignore it for Inbox
-                // Note: v2 grouping happens down the line when mapping or in inbox, but if the key exists, it skips inbox.
+                totalCount++;
                 continue;
             }
 
@@ -139,7 +143,6 @@ export async function POST(req: Request) {
             const existingInbox = await prisma.fileInbox.findUnique({ where: { path: pathDisplay } });
 
             if (!existingInbox) {
-                // Create new Inbox Item
                 // @ts-ignore
                 await prisma.fileInbox.create({
                     data: {
@@ -147,22 +150,18 @@ export async function POST(req: Request) {
                         path: pathDisplay,
                         extension: extension,
                         status: 'UNCLASSIFIED'
-                        // prediction defaults to null
                     }
                 });
-                // Update Progress every 10 items to avoid DB spam
-                if (count % 10 === 0) {
-                    await updateProgress('SYNC_PROGRESS', count, 0, `Spracovávam súbory... (${count})`);
-                }
-                // Update Progress every 10 items to avoid DB spam
-                if (count % 10 === 0) {
-                    await updateProgress('SYNC_PROGRESS', count, 0, `Spracovávam súbory... (${count})`);
-                }
-
+                newInboxItems++;
             }
-            count++;
+
+            totalCount++;
+
+            if (totalCount % 10 === 0) {
+                await updateProgress('SYNC_PROGRESS', totalCount, 0, `Spracovávam súbory... (${totalCount})`);
+            }
         }
-        console.log(`[DropboxSync] Checkpoint 4.b: Scanned ${count} files. Created ${newInboxItems} new Inbox items.`);
+        console.log(`[DropboxSync] Checkpoint 4.b: Scanned chunk. Created ${newInboxItems} new Inbox items. Total so far: ${totalCount}`);
 
         // ONLY Update timestamp if finished
         console.log("[DropboxSync] Sync step finished. Updating timestamp.");
@@ -185,7 +184,8 @@ export async function POST(req: Request) {
             hasMore: response.result.has_more,
             cursor: response.result.cursor,
             count: newInboxItems, // Count of NEW items
-            message: `Nájdených ${newInboxItems} nových súborov v Inboxe (celkovo skenovaných ${count}).`
+            scannedCount: entries.length,
+            message: `Nájdených ${newInboxItems} nových súborov v Inboxe (celkovo skenovaných ${totalCount}).`
         });
 
     } catch (error: any) {
