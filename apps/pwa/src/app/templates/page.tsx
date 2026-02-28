@@ -449,7 +449,10 @@ export default function TemplatesPage() {
                                                         </div>
                                                         <div>
                                                             <div className="font-bold text-slate-900 text-sm">{item.name}</div>
-                                                            <div className="text-[10px] text-slate-400 font-mono">{item.path}</div>
+                                                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1 max-w-[250px] truncate" title={item.path}>
+                                                                <FolderOpen size={10} className="shrink-0" />
+                                                                <span className="truncate">{item.path.replace(`/${item.name}`, '') || '/'}</span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </td>

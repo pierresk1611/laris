@@ -84,17 +84,16 @@ export async function POST(req: Request) {
         console.log(`[DropboxSync] Fetched ${entries.length} entries. Has more: ${response.result.has_more}`);
 
         // 3. Scan ALL files (Greedy Import for Inbox)
-        // We no longer filter by extension strictly, we take everything interesting
-        // Exclude system files
-        const ignoredExtensions = ['.ds_store', '.tmp', '.desktop', '.ini'];
+        // Strictly filter graphic formats to ignore invoices or documents in deep folders
+        const graphicExtensions = ['.psd', '.ai', '.psb', '.psdt', '.pdf', '.jpg', '.jpeg', '.png'];
 
         const validFiles = entries.filter(e => {
             if (e['.tag'] !== 'file') return false;
             const name = e.name.toLowerCase();
-            return !ignoredExtensions.some(ext => name.endsWith(ext));
+            return graphicExtensions.some(ext => name.endsWith(ext));
         });
 
-        console.log(`[DropboxSync] Checkpoint 3.c: Found ${validFiles.length} potential inbox items.`);
+        console.log(`[DropboxSync] Checkpoint 3.c: Found ${validFiles.length} potential graphic inbox items.`);
 
         // 4. Process into FileInbox
         console.log("[DropboxSync] Checkpoint 4: Processing into FileInbox...");
