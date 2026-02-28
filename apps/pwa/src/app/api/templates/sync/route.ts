@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { getSetting, updateProgress } from '@/lib/settings';
 import { Dropbox } from 'dropbox';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function POST(req: Request) {
     console.log("[DropboxSync] STARTing template synchronization...");
     let folderPath = '/TEMPLATES';
@@ -71,6 +74,8 @@ export async function POST(req: Request) {
                 response = await dbx.filesListFolderContinue({ cursor });
             } else {
                 console.log(`[DropboxSync] Starting new recursive scan in ${folderPath}...`);
+                console.log("FINAL DROPBOX API PATH:", folderPath);
+
                 response = await dbx.filesListFolder({
                     path: folderPath,
                     recursive: true,
