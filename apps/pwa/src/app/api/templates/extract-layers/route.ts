@@ -128,22 +128,45 @@ export async function POST(req: Request) {
         console.log(`[CloudExtract] Found ${extractedLayers.length} layers (${textLayerCount} text).`);
 
         // Update Template variants in DB
-        const updatedVariants = [...variants];
-        updatedVariants[variantIndex] = {
-            ...variant,
-            layers: extractedLayers
-        };
+        const currentVariants = (template.variants as any[]) || [];
+        const updatedVariants = [...currentVariants];
+
+        if (updatedVariants[variantIndex]) {
+            updatedVariants[variantIndex] = {
+                ...updatedVariants[variantIndex],
+                layers: extractedLayers
+            };
+        } else {
+            // If for some reason it's missing from the index but we have the variant variable
+            updatedVariants[variantIndex] = {
+                ...variant,
+                layers: extractedLayers
+            };
+        }
 
         const finalStatus = isNoPdfAi ? 'WARNING_NO_PDF' : 'NEEDS_REVIEW';
 
+        // Update Template in DB (legacy and metadata)
         await prisma.template.update({
-            where: { key: templateId },
+            where: { id: template.id },
             data: {
                 variants: updatedVariants as any,
                 mappedPaths: textLayerCount,
                 status: finalStatus,
                 updatedAt: new Date()
-            } as any
+            }
+        });
+
+        // ALSO Update TemplateFile record if it exists for this type
+        const typeToUpdate = variantIndex === 0 ? 'MAIN' : 'INVITE';
+        await prisma.templateFile.updateMany({
+            where: {
+                templateId: template.id,
+                type: typeToUpdate
+            },
+            data: {
+                layers: extractedLayers as any
+            }
         });
 
         if (isNoPdfAi) {
