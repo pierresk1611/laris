@@ -17,38 +17,85 @@ export async function POST(req: Request) {
 
         // 1. Handle Logic based on Action
         if (action === 'TEMPLATE') {
-            // Create Template
             const name = inboxItem.name;
+            const pathDisplay = inboxItem.path;
+            const extension = name.includes('.') ? name.substring(name.lastIndexOf('.')) : '';
             const nameWithoutExt = name.includes('.') ? name.substring(0, name.lastIndexOf('.')) : name;
-            // Key sanitation
-            const key = nameWithoutExt.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
 
-            // Check if template exists (maybe verify?)
-            const existingTemplate = await prisma.template.findUnique({ where: { key } });
+            // Extract SKU if present (pattern: SKU: xxx or SKU_xxx)
+            let extractedSku: string | null = null;
+            const skuMatch = nameWithoutExt.match(/SKU[:_]\s*([a-zA-Z0-9_-]+)/i);
+            if (skuMatch) {
+                extractedSku = skuMatch[1].trim();
+            }
+
+            // Clean name for key (remove SKU part)
+            const cleanName = nameWithoutExt.replace(/SKU[:_]\s*[a-zA-Z0-9_-]+/i, '').trim();
+
+            // Detect Variant Type using standard regexes
+            const v2Match = cleanName.match(/^ad_(.*?)_([OP])_(.*)$/i);
+            const oldMatch = cleanName.match(/^(.*?)_([OP])$/i);
+            const aggressiveMatch = cleanName.match(/^([A-Z0-9_-]+?)([OP])$/i);
+
+            let potentialKey = cleanName.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
+            let variantType = 'MAIN';
+
+            if (v2Match) {
+                potentialKey = v2Match[1].toUpperCase();
+                variantType = v2Match[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
+            } else if (oldMatch) {
+                potentialKey = oldMatch[1].replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
+                variantType = oldMatch[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
+            } else if (aggressiveMatch && !cleanName.includes('_')) {
+                potentialKey = aggressiveMatch[1].toUpperCase();
+                variantType = aggressiveMatch[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
+            } else if (cleanName.toUpperCase().endsWith('_P')) {
+                variantType = 'INVITE';
+            }
+
+            // If we have a SKU, use it as the primary key
+            const finalKey = extractedSku || potentialKey;
+
+            const existingTemplate = await prisma.template.findUnique({ where: { key: finalKey } }) as any;
+
+            const newVariant = {
+                key: nameWithoutExt,
+                type: variantType,
+                path: pathDisplay,
+                extension: extension,
+                mapping: {}
+            };
 
             if (existingTemplate) {
-                // Convert existing to active if needed? For now just log
-                // Update imageUrl if it doesn't have one but inbox does
-                // @ts-ignore
-                if (!existingTemplate.imageUrl && inboxItem.thumbnailData) {
+                const existingVariants = Array.isArray(existingTemplate.variants) ? existingTemplate.variants : [];
+                // Check if this path is already there
+                if (!existingVariants.find((v: any) => v.path === pathDisplay)) {
+                    existingVariants.push(newVariant);
+
                     await prisma.template.update({
-                        where: { key },
-                        data: { imageUrl: inboxItem.thumbnailData }
+                        where: { key: finalKey },
+                        data: {
+                            variants: existingVariants as any,
+                            imageUrl: existingTemplate.imageUrl || (inboxItem as any).thumbnailData || null,
+                            sku: existingTemplate.sku || extractedSku
+                        } as any
                     });
                 }
             } else {
-                // @ts-ignore
                 await prisma.template.create({
                     data: {
-                        key: key,
-                        name: nameWithoutExt.replace(/_/g, ' '),
-                        status: 'ACTIVE', // User explicitly said it's a template
+                        key: finalKey,
+                        name: cleanName.replace(/_/g, ' '),
+                        sku: extractedSku,
+                        status: 'ACTIVE',
                         isVerified: false,
-                        imageUrl: inboxItem.thumbnailData || null
-                    }
+                        imageUrl: (inboxItem as any).thumbnailData || null,
+                        variants: [newVariant] as any
+                    } as any
                 });
             }
-        } else if (action === 'DOCUMENT') {
+        }
+        else if (action === 'DOCUMENT') {
             // Future: Link to order? For now just mark processed.
         }
 

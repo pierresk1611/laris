@@ -51,7 +51,16 @@ export async function POST(req: Request) {
         const variant = variants[variantIndex];
 
         if (!variant || !variant.path) {
-            return NextResponse.json({ success: false, error: 'Variant or path not found' }, { status: 404 });
+            console.error(`[CloudExtract] Critical Failure for ${templateId}: Variant at index ${variantIndex} is missing or has no path.`, {
+                requestedIndex: variantIndex,
+                availableVariants: variants.length,
+                variantDetails: variant ? JSON.stringify(variant) : 'NULL'
+            });
+            return NextResponse.json({
+                success: false,
+                error: `Súbor pre variant ${variantIndex === 0 ? 'O' : 'P'} nemá definovanú cestu na Dropboxe. Skontaktujte administrátora.`,
+                details: `Missing path for template ${templateId}`
+            }, { status: 404 });
         }
 
         // Only handle PSD/PSDT for cloud extraction
@@ -128,7 +137,7 @@ export async function POST(req: Request) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     templateId,
-                    variantIndex,
+                    variantType: variant.type,
                     layers: extractedLayers
                 })
             });

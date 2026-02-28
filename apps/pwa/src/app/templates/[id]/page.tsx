@@ -96,11 +96,21 @@ export default function TemplateDetailPage() {
                     setVariants(loadedVariants);
 
                     if (loadedVariants.length > 0) {
-                        setActiveVariantType(loadedVariants[0].type);
+                        // Find first variant with a valid path
+                        const firstValidVariant = loadedVariants.find((v: any) => v.path) || loadedVariants[0];
+                        setActiveVariantType(firstValidVariant.type);
 
                         const initialLayers: Record<string, PsdLayer[]> = {};
                         loadedVariants.forEach((v: any) => {
-                            if (v.mapping && Object.keys(v.mapping).length > 0) {
+                            // First, use extracted layers if they exist
+                            if (Array.isArray(v.layers) && v.layers.length > 0) {
+                                initialLayers[v.type] = v.layers.map((l: any) => ({
+                                    ...l,
+                                    mappedTo: v.mapping?.[l.name] || null
+                                }));
+                            }
+                            // Fallback to mapping keys if layers array is missing (legacy)
+                            else if (v.mapping && Object.keys(v.mapping).length > 0) {
                                 initialLayers[v.type] = Object.keys(v.mapping).map(k => ({
                                     name: k,
                                     type: 'TEXT',
@@ -375,11 +385,11 @@ export default function TemplateDetailPage() {
                             ) : (
                                 <div className="flex items-center justify-center gap-2 mb-1 group px-4">
                                     <h2 className="text-xl font-bold text-slate-900 break-all leading-tight">
-                                        {alias || template?.name || decodeURIComponent(params.id as string)}
+                                        {alias || decodeURIComponent(params.id as string)}
                                     </h2>
                                     <button
                                         onClick={() => {
-                                            if (!alias) setAlias(alias || template?.name || decodeURIComponent(params.id as string));
+                                            if (!alias) setAlias(decodeURIComponent(params.id as string));
                                             setIsEditingAlias(true);
                                         }}
                                         className="p-1.5 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"

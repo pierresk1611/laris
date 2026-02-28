@@ -103,26 +103,38 @@ PRAVIDLÁ:
             }
         }
 
-        // Calculate status: If all text layers are mapped, it's ACTIVE (READY)
-        const totalTextLayers = layers.filter(l => l.type === 'TEXT').length;
-        const mappedTextLayers = Object.keys(finalMapping).length;
+        // Calculate combined status and total mapped paths across ALL variants
+        let allVariantsReady = true;
+        let totalMappedPathsAcrossVariants = 0;
 
-        let newStatus = 'NEEDS_REVIEW'; // Default
-        if (totalTextLayers > 0 && mappedTextLayers >= totalTextLayers) {
-            newStatus = 'ACTIVE';
-        } else if (totalTextLayers === 0) {
-            newStatus = 'ACTIVE'; // Nothing to map
+        for (const v of existingVariants) {
+            const vMapping = v.mapping || {};
+            const vLayers = v.layers || [];
+            const vTextLayers = vLayers.filter((l: any) => l.type === 'TEXT').length;
+            const vMappedCount = Object.keys(vMapping).length;
+
+            totalMappedPathsAcrossVariants += vMappedCount;
+
+            if (vTextLayers > 0 && vMappedCount < vTextLayers) {
+                allVariantsReady = false;
+            }
         }
+
+        const newStatus = allVariantsReady ? 'ACTIVE' : 'NEEDS_REVIEW';
+
+        console.log(`[AIMapping] Persistence: totalMapped=${totalMappedPathsAcrossVariants}, status=${newStatus}`);
 
         const template = await prisma.template.update({
             where: { key: templateId },
             data: {
                 variants: existingVariants as any,
-                mappedPaths: mappedTextLayers,
+                mappedPaths: totalMappedPathsAcrossVariants,
                 status: newStatus,
                 updatedAt: new Date()
             } as any
         });
+
+        const totalTextLayers = layers.filter(l => l.type === 'TEXT').length;
 
         return NextResponse.json({
             success: true,

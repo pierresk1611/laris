@@ -145,30 +145,26 @@ export async function POST(req: Request) {
             let variantType = 'MAIN';
 
             if (v2Match) {
-                // Kľúčom pre šablónu je teraz stredný kód (SKU)
                 potentialKey = v2Match[1].toUpperCase();
-                variantType = v2Match[2].toUpperCase();
+                variantType = v2Match[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
             } else if (oldMatch) {
-                // Odtrhneme koncovku _O alebo _P
                 potentialKey = oldMatch[1].replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
-                variantType = oldMatch[2].toUpperCase();
-            } else if (aggressiveMatch && !nameWithoutExt.includes('_')) {
-                // Pre zachytenie NO34P -> [1] NO34, [2] P
+                variantType = oldMatch[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
+            } else if (aggressiveMatch && !cleanNameForMatch.includes('_')) {
                 potentialKey = aggressiveMatch[1].toUpperCase();
-                variantType = aggressiveMatch[2].toUpperCase();
+                variantType = aggressiveMatch[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
+            } else if (cleanNameForMatch.toUpperCase().endsWith('_P')) {
+                variantType = 'INVITE';
             }
 
-            variantType = variantType === 'P' ? 'INVITE' : 'MAIN';
+            const finalKey = extractedSku || potentialKey;
 
             // Check 1: Is it already an active template?
-            const existingTemplate = await prisma.template.findUnique({ where: { key: potentialKey } });
+            const existingTemplate = await prisma.template.findUnique({ where: { key: finalKey } }) as any;
 
-            // Logic to append variant correctly to an existing template instead of skipping
             if (existingTemplate) {
-                // Skontrolujeme, ci dany subor uz nefiguruje vo variants
                 const existingVariants = Array.isArray(existingTemplate.variants) ? existingTemplate.variants : [];
-                // @ts-ignore
-                if (!existingVariants.find(v => v.path === pathDisplay)) {
+                if (!existingVariants.find((v: any) => v.path === pathDisplay)) {
                     // @ts-ignore
                     existingVariants.push({
                         key: nameWithoutExt,
@@ -179,12 +175,11 @@ export async function POST(req: Request) {
                     });
 
                     await prisma.template.update({
-                        where: { key: potentialKey },
+                        where: { key: finalKey },
                         data: {
                             variants: existingVariants,
-                            // If we found a specific SKU in filename and template doesn't have it, update it
-                            ...(extractedSku && !existingTemplate.sku ? { sku: extractedSku } : {})
-                        }
+                            sku: existingTemplate.sku || extractedSku
+                        } as any
                     });
                 }
 
