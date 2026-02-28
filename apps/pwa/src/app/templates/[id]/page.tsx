@@ -523,20 +523,46 @@ export default function TemplateDetailPage() {
 
                         {/* Akcia */}
                         <div className="w-full flex flex-col items-center space-y-3">
-                            <button
-                                onClick={handleLoadLayers}
-                                disabled={isLoadingLayers}
-                                className={`w-full py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition shadow-lg active:scale-[0.98] ${isLoadingLayers
-                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                    : 'bg-slate-900 text-white hover:bg-slate-800'
-                                    }`}
-                            >
-                                <RefreshCw className={isLoadingLayers ? 'animate-spin' : ''} size={20} />
-                                <span>{isLoadingLayers ? 'NAČÍTAVAM VRSTVY...' : 'NAČÍTAŤ VRSTVY Z PSD'}</span>
-                            </button>
-                            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter text-center leading-tight">
-                                Vykonáva sa bleskovo v cloude<br />bez nutnosti spusteného agenta.
-                            </p>
+                            {(() => {
+                                const currentVariant = variants.find(v => v.type === activeVariantType);
+                                const isCurrentPsd = currentVariant?.path?.toLowerCase().endsWith('.psd') || currentVariant?.path?.toLowerCase().endsWith('.psdt');
+                                const hasAnyPsd = variants.some(v => v.path?.toLowerCase().endsWith('.psd') || v.path?.toLowerCase().endsWith('.psdt'));
+                                const isImage = ['png', 'jpg', 'jpeg'].includes(currentVariant?.path?.split('.').pop()?.toLowerCase() || '');
+
+                                return (
+                                    <>
+                                        <button
+                                            onClick={handleLoadLayers}
+                                            disabled={isLoadingLayers || (!isCurrentPsd && !hasAnyPsd)}
+                                            className={`w-full py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition shadow-lg active:scale-[0.98] ${isLoadingLayers || (!isCurrentPsd && !hasAnyPsd)
+                                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                                }`}
+                                        >
+                                            <RefreshCw className={isLoadingLayers ? 'animate-spin' : ''} size={20} />
+                                            <span>{isLoadingLayers ? 'NAČÍTAVAM VRSTVY...' : 'NAČÍTAŤ VRSTVY Z PSD'}</span>
+                                        </button>
+
+                                        {!isCurrentPsd && hasAnyPsd && (
+                                            <p className="text-[10px] font-bold text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 text-center leading-tight">
+                                                Aktuálny náhľad je obrázok. Systém sa pokúsi automaticky použiť zdrojový .psd súbor priradený k tejto šablóne.
+                                            </p>
+                                        )}
+
+                                        {!isCurrentPsd && !hasAnyPsd && isImage && (
+                                            <p className="text-[10px] font-bold text-red-500 bg-red-50 p-2 rounded-lg border border-red-100 text-center leading-tight">
+                                                Toto je len obrázok náhľadu. Vrstvy sa dajú čítať len zo zdrojového PSD. Priložte k šablóne .psd súbor.
+                                            </p>
+                                        )}
+
+                                        {(isCurrentPsd || hasAnyPsd) && (
+                                            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter text-center leading-tight">
+                                                Vykonáva sa bleskovo v cloude<br />bez nutnosti spusteného agenta.
+                                            </p>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </div>
                     </div>
 

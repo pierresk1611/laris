@@ -71,6 +71,18 @@ export async function POST(req: Request) {
             variant = legacyVariants[variantIndex];
         }
 
+        // Smart PSD Selection: If the current variant is not a PSD/PSDT, try to find one in the template's files
+        const isPsd = (p: string) => p.toLowerCase().endsWith('.psd') || p.toLowerCase().endsWith('.psdt');
+
+        if (variant && variant.path && !isPsd(variant.path)) {
+            console.log(`[CloudExtract] Current variant ${variant.type} is not a PSD (${variant.path}). Searching for alternatives...`);
+            const psdFile = relationalFiles.find((f: any) => isPsd(f.path));
+            if (psdFile) {
+                console.log(`[CloudExtract] Found alternative PSD: ${psdFile.path}`);
+                variant = psdFile;
+            }
+        }
+
         if (!variant || !variant.path) {
             const variantCode = variantIndex === 0 ? 'O' : 'P';
             const errorMsg = `Súbor pre variant ${variantCode} nemá definovanú cestu na Dropboxe.`;
@@ -89,13 +101,22 @@ export async function POST(req: Request) {
             }, { status: 404 });
         }
 
-        // Only handle PSD/PSDT for cloud extraction
+        // Final format check
         const ext = variant.path.split('.').pop()?.toLowerCase();
         if (ext !== 'psd' && ext !== 'psdt') {
+            // Check if it's an image
+            const isImage = ['png', 'jpg', 'jpeg'].includes(ext || '');
+            if (isImage) {
+                return NextResponse.json({
+                    success: false,
+                    error: 'Toto je len obrázok náhľadu. Vrstvy sa dajú čítať len zo zdrojového PSD. Priložte k šablóne .psd súbor.',
+                }, { status: 400 });
+            }
+
             return NextResponse.json({
                 success: false,
-                error: 'Cloud extraction only supports .psd and .psdt files. For .ai files, use the Agent.',
-                requiresAgent: true
+                error: 'Cloud extraction podporuje len .psd a .psdt súbory. Pre .ai súbory použite Agenta.',
+                requiresAgent: ext === 'ai'
             });
         }
 
