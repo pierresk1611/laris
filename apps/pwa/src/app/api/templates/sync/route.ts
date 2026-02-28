@@ -25,7 +25,9 @@ export async function POST(req: Request) {
         if (!customPath.startsWith('/')) {
             customPath = '/' + customPath;
         }
-        folderPath = customPath;
+
+        // Dropbox API v2 requires an empty string for the root directory, not "/"
+        folderPath = customPath === '/' ? '' : customPath;
 
         console.log("[DropboxSync] Checkpoint 1.b: Settings loaded.", { folderPath, hasAccess: !!accessToken, hasRefresh: !!refreshToken });
 
