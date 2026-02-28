@@ -66,7 +66,7 @@ export default function LoginPage() {
                         disabled={loading}
                         className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 px-4 rounded-xl transition-all shadow-lg shadow-slate-900/20 active:scale-[0.98] disabled:opacity-70 mt-6"
                     >
-                        {loading ? "Overujem..." : "Získať prístup"}
+                        {loading ? "Overujem..." : "Prihlásiť sa"}
                     </button>
                 </form>
             </div>
