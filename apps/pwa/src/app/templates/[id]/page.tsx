@@ -15,7 +15,8 @@ import {
     AlertCircle,
     Edit2,
     Check,
-    X
+    X,
+    Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,6 +25,17 @@ interface PsdLayer {
     type: 'TEXT' | 'IMAGE' | 'GROUP';
     mappedTo?: string;
 }
+
+const AVAILABLE_META_FIELDS = [
+    'NAME_MAIN',
+    'DATE_MAIN',
+    'TIME_MAIN',
+    'PLACE_MAIN',
+    'BODY_FULL',
+    'QUOTE_TOP',
+    'QUOTE_BOTTOM',
+    'INVITE_TEXT'
+];
 
 export default function TemplateDetailPage() {
     const params = useParams();
@@ -34,6 +46,7 @@ export default function TemplateDetailPage() {
     const [alias, setAlias] = useState<string>('');
     const [isEditingAlias, setIsEditingAlias] = useState(false);
     const [isSavingAlias, setIsSavingAlias] = useState(false);
+    const [isAILoading, setIsAILoading] = useState(false);
 
     // Load existing mapping from DB
     useEffect(() => {
@@ -78,6 +91,37 @@ export default function TemplateDetailPage() {
         } finally {
             setIsSavingAlias(false);
         }
+    };
+
+    const handleAIMapping = async () => {
+        setIsAILoading(true);
+        const mapPromise = fetch('/api/ai/map-layers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                templateId: decodeURIComponent(params.id as string),
+                layers: layers
+            })
+        }).then(async res => {
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error);
+            return data;
+        });
+
+        toast.promise(mapPromise, {
+            loading: 'AI analyzuje a mapuje vrstvy...',
+            success: (data) => {
+                // Apply the mapping visually
+                setLayers(prev => prev.map(l => ({
+                    ...l,
+                    mappedTo: data.mapping[l.name] || ''
+                })));
+                router.refresh();
+                return data.message || "AI Mapovanie úspešné";
+            },
+            error: 'AI Mapovanie zlyhalo',
+            finally: () => setIsAILoading(false)
+        });
     };
 
     const handleSaveMapping = async () => {
@@ -246,7 +290,7 @@ export default function TemplateDetailPage() {
                     <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-xl shadow-slate-200">
                         <h4 className="text-xs font-black uppercase tracking-[0.2em] text-blue-400 mb-6">Dostupné meta-polia</h4>
                         <div className="space-y-3">
-                            {['customer_name', 'event_date', 'event_location', 'guest_name', 'table_number'].map(field => (
+                            {AVAILABLE_META_FIELDS.map(field => (
                                 <div key={field} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl">
                                     <span className="text-xs font-bold text-slate-300">{field}</span>
                                     <Type size={14} className="text-blue-400 opacity-50" />
@@ -264,11 +308,23 @@ export default function TemplateDetailPage() {
                                 <Layers className="text-blue-500" size={20} />
                                 <span>Mapovanie vrstiev</span>
                             </h2>
-                            {layers.length > 0 && (
-                                <span className="px-3 py-1 bg-green-50 text-green-600 rounded-full text-[10px] font-black uppercase tracking-widest">
-                                    {layers.length} vrstiev nájdených
-                                </span>
-                            )}
+                            <div className="flex items-center gap-3">
+                                {layers.length > 0 && (
+                                    <>
+                                        <button
+                                            onClick={handleAIMapping}
+                                            disabled={isAILoading || status !== 'success'}
+                                            className="px-3 py-1.5 flex items-center gap-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-lg text-[11px] font-black uppercase tracking-wider shadow-md transition-all disabled:opacity-50"
+                                        >
+                                            <Sparkles size={14} className={isAILoading ? "animate-pulse" : ""} />
+                                            {isAILoading ? 'Mapujem...' : 'AI Auto-Map'}
+                                        </button>
+                                        <span className="px-3 py-1 bg-green-50 text-green-600 rounded-full text-[10px] font-black uppercase tracking-widest">
+                                            {layers.length} vrstiev
+                                        </span>
+                                    </>
+                                )}
+                            </div>
                         </div>
 
                         <div className="p-0">
@@ -313,9 +369,9 @@ export default function TemplateDetailPage() {
                                                     }}
                                                 >
                                                     <option value="">Nenamapované</option>
-                                                    <option value="customer_name">customer_name</option>
-                                                    <option value="event_date">event_date</option>
-                                                    <option value="event_location">event_location</option>
+                                                    {AVAILABLE_META_FIELDS.map(mf => (
+                                                        <option key={mf} value={mf}>{mf}</option>
+                                                    ))}
                                                 </select>
                                                 {layer.mappedTo ? (
                                                     <CheckCircle2 className="text-green-500" size={20} />

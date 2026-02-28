@@ -20,7 +20,8 @@ import {
     Wand2,
     ArrowRight,
     ChevronDown,
-    ChevronRight
+    ChevronRight,
+    Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -140,6 +141,7 @@ export default function TemplatesPage() {
     const [isSyncing, setIsSyncing] = useState(false);
     const [lastSync, setLastSync] = useState<{ date: string; status: string } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isBulkMapping, setIsBulkMapping] = useState(false);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -315,6 +317,41 @@ export default function TemplatesPage() {
         }
     };
 
+    const handleBulkMapping = async () => {
+        setIsBulkMapping(true);
+        const unmappedTemplates = templates.filter(t => t.status === 'ERROR' || t.status === 'NEEDS_REVIEW');
+
+        if (unmappedTemplates.length === 0) {
+            toast.info("Všetky aktívne šablóny v zozname sú už namapované.");
+            setIsBulkMapping(false);
+            return;
+        }
+
+        toast.loading(`Spúšťam AI mapovanie pre ${unmappedTemplates.length} šablón...`, { id: 'bulk-map' });
+
+        let successCount = 0;
+        for (const tpl of unmappedTemplates) {
+            try {
+                // Skúsime volať mapovaciu API pre šablóny.
+                const layers: any[] = []; // V produkcií si agent najprv loadne layers
+                await fetch('/api/ai/map-layers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        templateId: tpl.key,
+                        layers: layers
+                    })
+                });
+                successCount++;
+            } catch (e) { console.error(`Failed mapping ${tpl.key}`, e) }
+        }
+
+        toast.dismiss('bulk-map');
+        toast.success(`Hromadné AI mapovanie dokončené pre ${successCount} položiek.`);
+        setIsBulkMapping(false);
+        fetchData();
+    };
+
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
     const groupedInbox = useMemo(() => {
@@ -471,87 +508,107 @@ export default function TemplatesPage() {
 
             {/* Content Area */}
             {activeTab === 'TEMPLATES' ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {isLoading ? (
-                        Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="bg-white rounded-3xl border border-slate-100 p-6 h-64 animate-pulse">
-                                <div className="w-full h-32 bg-slate-50 rounded-2xl mb-4" />
-                                <div className="w-24 h-6 bg-slate-50 rounded-lg mb-2" />
-                            </div>
-                        ))
-                    ) : templates.length === 0 ? (
-                        <div className="col-span-full py-20 text-center">
-                            <Layers size={48} className="mx-auto text-slate-200 mb-4" />
-                            <h3 className="text-lg font-bold text-slate-400">Žiadne aktívne šablóny</h3>
-                            <p className="text-sm text-slate-400">Skontrolujte Inbox a pridajte nové šablóny.</p>
-                        </div>
-                    ) : (
-                        templates.map((template: Template) => (
-                            <Link href={`/templates/${encodeURIComponent(template.key)}`} key={template.key}>
-                                <div className={`cursor-pointer bg-white rounded-3xl border transition-all group flex flex-col h-full overflow-hidden ${template.isVerified ? 'border-green-200 shadow-green-100 ring-1 ring-green-100 shadow-sm' : 'border-slate-100 shadow-sm hover:shadow-md'}`}>
-                                    {/* Thumbnail */}
-                                    <div className="h-48 bg-slate-50 w-full relative border-b border-slate-100">
-                                        {template.imageUrl ? (
-                                            // eslint-disable-next-line @next/next/no-img-element
-                                            <img src={template.imageUrl} alt={template.name} className="w-full h-full object-cover" />
-                                        ) : (template as any)._inboxPath ? (
-                                            <ThumbnailViewer path={(template as any)._inboxPath} extension={(template as any)._inboxExt} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                                <ImageIcon size={32} strokeWidth={1} />
-                                            </div>
-                                        )}
-                                        {template.isVerified && (
-                                            <div className="absolute top-3 right-3 px-3 py-1.5 bg-green-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg flex items-center gap-1.5 z-10">
-                                                <CheckCircle2 size={12} />
-                                                Overená
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="p-6 flex flex-col flex-1">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className={`p-2 rounded-xl transition-colors ${template.isVerified ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
-                                                <Layers size={18} />
-                                            </div>
-                                            <button className="p-2 text-slate-400 hover:text-slate-600">
-                                                <MoreHorizontal size={20} />
-                                            </button>
-                                        </div>
-                                        <div className="flex items-baseline justify-between mb-1">
-                                            <h3 className="text-lg font-black text-slate-900 truncate pr-2" title={template.alias || template.name || template.key}>
-                                                {template.alias || template.name || template.key}
-                                            </h3>
-                                            {(template.alias || (template.name && template.name !== template.key)) && (
-                                                <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase shrink-0">
-                                                    SKU: {template.key}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {/* If it has variants, we can show a small badge */}
-                                        <div className="flex items-center justify-between mb-6">
-                                            <p className="text-xs font-medium text-slate-500 line-clamp-1 truncate w-full pr-2">
-                                                {template.alias ? template.name : "Originál"}
-                                            </p>
-                                            {template.variants && template.variants.length > 0 && (
-                                                <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded uppercase shrink-0">
-                                                    +{template.variants.length}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center justify-between pt-4 border-t border-slate-50 mt-auto">
-                                            <div className="flex items-center gap-2">
-                                                <FolderOpen size={14} className="text-slate-400" />
-                                                <span className="text-[10px] font-bold text-slate-500">{template.mappedPaths} polí</span>
-                                            </div>
-                                            <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${template.status === 'ACTIVE' ? 'bg-slate-100 text-slate-600' : 'bg-red-50 text-red-600'}`}>
-                                                {template.status === 'ACTIVE' ? 'Aktívna' : 'Chyba'}
-                                            </span>
-                                        </div>
-                                    </div>
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto">
+                        <button
+                            onClick={handleBulkMapping}
+                            disabled={isBulkMapping}
+                            className={`px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm border ${isBulkMapping
+                                ? 'bg-purple-50 text-purple-400 border-purple-100 cursor-not-allowed'
+                                : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50 hover:border-purple-300'
+                                }`}
+                        >
+                            <Sparkles size={16} className={isBulkMapping ? 'animate-pulse text-purple-500' : ''} />
+                            <span className="whitespace-nowrap">{isBulkMapping ? 'AI pracuje...' : 'Hromadný AI Map'}</span>
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {isLoading ? (
+                            Array.from({ length: 6 }).map((_, i) => (
+                                <div key={i} className="bg-white rounded-3xl border border-slate-100 p-6 h-64 animate-pulse">
+                                    <div className="w-full h-32 bg-slate-50 rounded-2xl mb-4" />
+                                    <div className="w-24 h-6 bg-slate-50 rounded-lg mb-2" />
                                 </div>
-                            </Link>
-                        ))
-                    )}
+                            ))
+                        ) : templates.length === 0 ? (
+                            <div className="col-span-full py-20 text-center">
+                                <Layers size={48} className="mx-auto text-slate-200 mb-4" />
+                                <h3 className="text-lg font-bold text-slate-400">Žiadne aktívne šablóny</h3>
+                                <p className="text-sm text-slate-400">Skontrolujte Inbox a pridajte nové šablóny.</p>
+                            </div>
+                        ) : (
+                            templates.map((template: Template) => (
+                                <Link href={`/templates/${encodeURIComponent(template.key)}`} key={template.key}>
+                                    <div className={`cursor-pointer bg-white rounded-3xl border transition-all group flex flex-col h-full overflow-hidden ${template.isVerified ? 'border-green-200 shadow-green-100 ring-1 ring-green-100 shadow-sm' : 'border-slate-100 shadow-sm hover:shadow-md'}`}>
+                                        {/* Thumbnail */}
+                                        <div className="h-48 bg-slate-50 w-full relative border-b border-slate-100">
+                                            {template.imageUrl ? (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img src={template.imageUrl} alt={template.name} className="w-full h-full object-cover" />
+                                            ) : (template as any)._inboxPath ? (
+                                                <ThumbnailViewer path={(template as any)._inboxPath} extension={(template as any)._inboxExt} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                    <ImageIcon size={32} strokeWidth={1} />
+                                                </div>
+                                            )}
+                                            {template.isVerified && (
+                                                <div className="absolute top-3 right-3 px-3 py-1.5 bg-green-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg flex items-center gap-1.5 z-10">
+                                                    <CheckCircle2 size={12} />
+                                                    Overená
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="p-6 flex flex-col flex-1">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className={`p-2 rounded-xl transition-colors ${template.isVerified ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
+                                                    <Layers size={18} />
+                                                </div>
+                                                <button className="p-2 text-slate-400 hover:text-slate-600">
+                                                    <MoreHorizontal size={20} />
+                                                </button>
+                                            </div>
+                                            <div className="flex items-baseline justify-between mb-1">
+                                                <h3 className="text-lg font-black text-slate-900 truncate pr-2" title={template.alias || template.name || template.key}>
+                                                    {template.alias || template.name || template.key}
+                                                </h3>
+                                                {(template.alias || (template.name && template.name !== template.key)) && (
+                                                    <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase shrink-0">
+                                                        SKU: {template.key}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {/* If it has variants, we can show a small badge */}
+                                            <div className="flex items-center justify-between mb-6">
+                                                <p className="text-xs font-medium text-slate-500 line-clamp-1 truncate w-full pr-2">
+                                                    {template.alias ? template.name : "Originál"}
+                                                </p>
+                                                {template.variants && template.variants.length > 0 && (
+                                                    <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded uppercase shrink-0">
+                                                        +{template.variants.length}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center justify-between pt-4 border-t border-slate-50 mt-auto">
+                                                <div className="flex items-center gap-2">
+                                                    <FolderOpen size={14} className="text-slate-400" />
+                                                    <span className="text-[10px] font-bold text-slate-500">{template.mappedPaths} polí</span>
+                                                </div>
+                                                <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${template.status === 'ACTIVE' ? 'bg-green-50 text-green-600' :
+                                                    template.status === 'NEEDS_REVIEW' ? 'bg-amber-50 text-amber-600' :
+                                                        'bg-red-50 text-red-600'
+                                                    }`}>
+                                                    {template.status === 'ACTIVE' ? 'Aktívna' :
+                                                        template.status === 'NEEDS_REVIEW' ? 'Zdieľaná (Kontrola)' :
+                                                            'Chyba'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))
+                        )}
+                    </div>
                 </div>
             ) : (
                 /* INBOX TAB */
