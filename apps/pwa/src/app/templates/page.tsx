@@ -319,35 +319,33 @@ export default function TemplatesPage() {
 
     const handleBulkMapping = async () => {
         setIsBulkMapping(true);
-        const unmappedTemplates = templates.filter(t => t.status === 'ERROR' || t.status === 'NEEDS_REVIEW');
+        const unmappedTemplates = templates.filter(t => t.status === 'ERROR' || t.status === 'NEEDS_REVIEW' || t.status === 'UNMAPPED' || !t.mappedPaths || t.mappedPaths === 0);
 
         if (unmappedTemplates.length === 0) {
-            toast.info("Všetky aktívne šablóny v zozname sú už namapované.");
+            toast.info("Zoznam je čistý. Žiadna šablóna nevyžaduje hromadné mapovanie.");
             setIsBulkMapping(false);
             return;
         }
 
-        toast.loading(`Spúšťam AI mapovanie pre ${unmappedTemplates.length} šablón...`, { id: 'bulk-map' });
+        toast.loading(`Spracovávam ${unmappedTemplates.length} šablón. Posielam agentovi...`, { id: 'bulk-map' });
 
         let successCount = 0;
         for (const tpl of unmappedTemplates) {
             try {
-                // Skúsime volať mapovaciu API pre šablóny.
-                const layers: any[] = []; // V produkcií si agent najprv loadne layers
-                await fetch('/api/ai/map-layers', {
+                await fetch('/api/agent/jobs', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        templateId: tpl.key,
-                        layers: layers
+                        type: 'EXTRACT_LAYERS',
+                        payload: { templateId: tpl.key }
                     })
                 });
                 successCount++;
-            } catch (e) { console.error(`Failed mapping ${tpl.key}`, e) }
+            } catch (e) { console.error(`Failed queuing extraction for ${tpl.key}`, e) }
         }
 
         toast.dismiss('bulk-map');
-        toast.success(`Hromadné AI mapovanie dokončené pre ${successCount} položiek.`);
+        toast.info(`Šablóny najprv musí prečítať Agent. Čakám na extrakciu vrstiev pre ${successCount} položiek.`, { duration: 5000 });
         setIsBulkMapping(false);
         fetchData();
     };
