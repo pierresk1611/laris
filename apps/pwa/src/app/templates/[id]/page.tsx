@@ -9,6 +9,7 @@ import {
     RefreshCw,
     Save,
     FileType,
+    FileText,
     Hash,
     Type,
     CheckCircle2,
@@ -346,96 +347,98 @@ export default function TemplateDetailPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left: Info & Actions */}
                 <div className="lg:col-span-1 space-y-6">
-                    <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="p-4 bg-blue-50 rounded-2xl">
-                                <FileType className="text-blue-500" size={32} />
+                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center justify-center space-y-6">
+                        {/* Ikona a Hlavné info */}
+                        <div className="flex flex-col items-center text-center space-y-2 w-full">
+                            <div className="bg-blue-50 p-4 rounded-2xl text-blue-600 mb-2">
+                                <FileText size={40} />
                             </div>
-                            <div>
-                                {isEditingAlias ? (
-                                    <div className="flex items-center gap-2 mb-1">
+
+                            {isEditingAlias ? (
+                                <div className="flex items-center gap-2 mb-1 w-full px-4">
+                                    <input
+                                        autoFocus
+                                        value={alias}
+                                        onChange={e => setAlias(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleSaveAlias()}
+                                        className="text-xl font-black text-slate-900 border-b-2 border-blue-500 bg-blue-50/50 outline-none w-full text-center"
+                                        placeholder="Nový názov..."
+                                        disabled={isSavingAlias}
+                                    />
+                                    <button onClick={handleSaveAlias} disabled={isSavingAlias} className="p-1 text-green-600 hover:bg-green-50 rounded">
+                                        <Check size={18} />
+                                    </button>
+                                    <button onClick={() => setIsEditingAlias(false)} disabled={isSavingAlias} className="p-1 text-slate-400 hover:bg-slate-50 rounded">
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-center gap-2 mb-1 group px-4">
+                                    <h2 className="text-xl font-bold text-slate-900 break-all leading-tight">
+                                        {alias || template?.name || decodeURIComponent(params.id as string)}
+                                    </h2>
+                                    <button
+                                        onClick={() => {
+                                            if (!alias) setAlias(alias || template?.name || decodeURIComponent(params.id as string));
+                                            setIsEditingAlias(true);
+                                        }}
+                                        className="p-1.5 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                                    >
+                                        <Edit2 size={16} />
+                                    </button>
+                                </div>
+                            )}
+
+                            <div className="space-y-1">
+                                <p className="text-xs font-mono text-slate-400 uppercase tracking-wider">
+                                    KĽÚČ: {decodeURIComponent(params.id as string)}
+                                </p>
+
+                                {isEditingSku ? (
+                                    <div className="flex items-center justify-center gap-2">
                                         <input
                                             autoFocus
-                                            value={alias}
-                                            onChange={e => setAlias(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && handleSaveAlias()}
-                                            className="text-xl font-black text-slate-900 border-b-2 border-blue-500 bg-blue-50/50 outline-none w-full px-1"
-                                            placeholder="Nový názov..."
-                                            disabled={isSavingAlias}
+                                            value={sku}
+                                            onChange={e => setSku(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleSaveSku()}
+                                            className="text-sm font-black text-purple-600 border-b-2 border-purple-500 bg-purple-50/50 outline-none w-32 px-1 text-center"
+                                            placeholder="SKU..."
+                                            disabled={isSavingSku}
                                         />
-                                        <button onClick={handleSaveAlias} disabled={isSavingAlias} className="p-1 text-green-600 hover:bg-green-50 rounded">
-                                            <Check size={18} />
+                                        <button onClick={handleSaveSku} disabled={isSavingSku} className="text-green-600 hover:bg-green-50 p-1 rounded-lg">
+                                            <Check size={14} />
                                         </button>
-                                        <button onClick={() => setIsEditingAlias(false)} disabled={isSavingAlias} className="p-1 text-slate-400 hover:bg-slate-50 rounded">
-                                            <X size={18} />
+                                        <button onClick={() => setIsEditingSku(false)} disabled={isSavingSku} className="text-slate-400 hover:bg-slate-50 p-1 rounded-lg">
+                                            <X size={14} />
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-2 mb-1 group">
-                                        <h3 className="text-xl font-black text-slate-900">{alias || decodeURIComponent(params.id as string)}</h3>
-                                        <button
-                                            onClick={() => {
-                                                if (!alias) setAlias(decodeURIComponent(params.id as string));
-                                                setIsEditingAlias(true);
-                                            }}
-                                            className="p-1.5 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
-                                        >
-                                            <Edit2 size={16} />
-                                        </button>
-                                    </div>
+                                    <button
+                                        onClick={() => setIsEditingSku(true)}
+                                        className={`text-[10px] font-bold border px-2 py-0.5 rounded-full transition ${sku ? 'text-purple-600 border-purple-200 bg-purple-50 hover:bg-purple-100' : 'text-blue-600 border-blue-200 hover:bg-blue-50'
+                                            }`}
+                                    >
+                                        {sku ? `SKU: ${sku}` : '+ PRIDAŤ SKU E-SHOPU'}
+                                    </button>
                                 )}
-                                <div className="space-y-1">
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                        Kľúč: {decodeURIComponent(params.id as string)}
-                                    </p>
-                                    {isEditingSku ? (
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                autoFocus
-                                                value={sku}
-                                                onChange={e => setSku(e.target.value)}
-                                                onKeyDown={e => e.key === 'Enter' && handleSaveSku()}
-                                                className="text-sm font-black text-purple-600 border-b-2 border-purple-500 bg-purple-50/50 outline-none w-32 px-1"
-                                                placeholder="Zadajte SKU..."
-                                                disabled={isSavingSku}
-                                            />
-                                            <button onClick={handleSaveSku} disabled={isSavingSku} className="text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-colors">
-                                                <Check size={16} />
-                                            </button>
-                                            <button onClick={() => setIsEditingSku(false)} disabled={isSavingSku} className="text-slate-400 hover:bg-slate-50 p-1.5 rounded-lg transition-colors">
-                                                <X size={16} />
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div
-                                            className="flex items-center gap-2 group/sku cursor-pointer w-fit"
-                                            onClick={() => setIsEditingSku(true)}
-                                        >
-                                            <span className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border transition-all ${sku ? 'text-purple-600 bg-purple-50 border-purple-100 shadow-sm shadow-purple-50/50' : 'text-slate-400 bg-slate-50 border-slate-100'}`}>
-                                                {sku ? `SKU: ${sku}` : 'Pridať SKU e-shopu'}
-                                            </span>
-                                            <Edit2 size={12} className="text-slate-300 opacity-0 group-hover/sku:opacity-100 transition-opacity" />
-                                        </div>
-                                    )}
-                                </div>
                             </div>
                         </div>
 
-                        <div className="space-y-4 pt-6 border-t border-slate-50">
+                        {/* Akcia */}
+                        <div className="w-full flex flex-col items-center space-y-3">
                             <button
                                 onClick={handleLoadLayers}
                                 disabled={isLoadingLayers}
-                                className={`w-full flex items-center justify-center gap-3 py-4 rounded-2xl text-sm font-black uppercase tracking-wider transition-all shadow-xl ${isLoadingLayers
+                                className={`w-full py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition shadow-lg active:scale-[0.98] ${isLoadingLayers
                                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                    : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200'
+                                    : 'bg-slate-900 text-white hover:bg-slate-800'
                                     }`}
                             >
-                                <RefreshCw className={isLoadingLayers ? 'animate-spin' : ''} size={18} />
-                                <span>{isLoadingLayers ? 'Načítavam z PS...' : 'Načítať vrstvy z PSD'}</span>
+                                <RefreshCw className={isLoadingLayers ? 'animate-spin' : ''} size={20} />
+                                <span>{isLoadingLayers ? 'NAČÍTAVAM VRSTVY...' : 'NAČÍTAŤ VRSTVY Z PSD'}</span>
                             </button>
-
-                            <p className="text-[10px] text-center font-bold text-blue-400 uppercase tracking-widest px-4 leading-relaxed">
-                                Vykonáva sa bleskovo v cloude bez nutnosti spusteného Agenta.
+                            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter text-center leading-tight">
+                                Vykonáva sa bleskovo v cloude<br />bez nutnosti spusteného agenta.
                             </p>
                         </div>
                     </div>
