@@ -143,9 +143,9 @@ export default function TemplatesPage() {
         setIsLoading(true);
         try {
             const [templatesRes, settingsRes, inboxRes] = await Promise.all([
-                fetch('/api/templates'),
-                fetch('/api/settings'),
-                fetch('/api/inbox')
+                fetch('/api/templates', { cache: 'no-store' }),
+                fetch('/api/settings', { cache: 'no-store' }),
+                fetch('/api/inbox', { cache: 'no-store' })
             ]);
 
             const templatesData = await templatesRes.json();

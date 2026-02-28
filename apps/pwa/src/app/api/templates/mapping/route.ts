@@ -15,8 +15,9 @@ export async function GET(request: Request) {
         });
 
         return NextResponse.json({ success: true, mapping: template?.mappingData || null });
-    } catch (error) {
-        return NextResponse.json({ success: false, error: 'Database error' }, { status: 503 });
+    } catch (error: any) {
+        console.error("[TemplateMapping] GET Error:", error);
+        return NextResponse.json({ success: false, error: 'Database error', details: error?.message || String(error) }, { status: 503 });
     }
 }
 
@@ -45,7 +46,8 @@ export async function POST(request: Request) {
         });
 
         return NextResponse.json({ success: true, template });
-    } catch (error) {
-        return NextResponse.json({ success: false, error: 'Failed to save mapping' }, { status: 400 });
+    } catch (error: any) {
+        console.error("[TemplateMapping] POST Upsert Error:", error);
+        return NextResponse.json({ success: false, error: 'Failed to save mapping', details: error?.message || String(error) }, { status: 400 });
     }
 }

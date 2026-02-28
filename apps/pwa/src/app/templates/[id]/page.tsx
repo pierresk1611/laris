@@ -33,7 +33,7 @@ export default function TemplateDetailPage() {
     useEffect(() => {
         const loadMapping = async () => {
             try {
-                const res = await fetch(`/api/templates/mapping?key=${encodeURIComponent(params.id as string)}`);
+                const res = await fetch(`/api/templates/mapping?key=${encodeURIComponent(params.id as string)}`, { cache: 'no-store' });
                 const data = await res.json();
                 if (data.success && data.mapping) {
                     // Convert mappingData JSON to layers array if needed, 
@@ -57,36 +57,47 @@ export default function TemplateDetailPage() {
             if (l.mappedTo) mappingData[l.name] = l.mappedTo;
         });
 
+        // Ensure key is perfectly decoded (e.g. from %20 to space)
+        const keyId = decodeURIComponent(params.id as string);
+
         const savePromise = fetch('/api/templates/mapping', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                key: params.id,
+                key: keyId,
                 mappingData
             })
-        }).then(res => res.json());
+        }).then(async res => {
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                console.error("Save Mapping Error:", data);
+                throw new Error(data.details || data.error || "Ukladanie zlyhalo");
+            }
+            return data;
+        });
 
         toast.promise(savePromise, {
             loading: 'Ukladám mapovanie...',
             success: (data) => {
-                if (data.success) {
-                    // Trigger preview generation silently in background
-                    fetch('/api/agent/jobs', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            type: 'GENERATE_PREVIEW',
-                            payload: { templateId: params.id }
-                        })
-                    }).catch(console.error);
+                // Trigger preview generation silently in background
+                fetch('/api/agent/jobs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'GENERATE_PREVIEW',
+                        payload: { templateId: keyId }
+                    })
+                }).catch(console.error);
 
-                    router.refresh();
+                // Revalidate client and wait a tiny bit to avoid stale cache from router push
+                router.refresh();
+                setTimeout(() => {
                     router.push('/templates');
-                    return "Mapovanie úspešne uložené!";
-                }
-                throw new Error("Chyba API");
+                }, 300);
+
+                return "Mapovanie úspešne uložené!";
             },
-            error: 'Chyba pri ukladaní mapovania.'
+            error: (err: any) => `Chyba pri ukladaní: ${err.message}`
         });
     };
 
