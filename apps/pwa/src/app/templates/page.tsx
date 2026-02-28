@@ -248,13 +248,11 @@ export default function TemplatesPage() {
                             <CheckCircle2 size={14} className="text-green-500" />
                             <span className="text-green-600">Stav: OK</span>
                         </>
-                    ) : lastSync ? (
-                        <>
-                            <XCircle size={14} className="text-red-500" />
-                            <span className="text-red-600">Stav: Chyba ({lastSync.status.replace('ERROR: ', '')})</span>
-                        </>
                     ) : (
-                        <span className="text-slate-400">Stav: Žiadne dáta</span>
+                        <>
+                            <CheckCircle2 size={14} className="text-slate-400" />
+                            <span className="text-slate-500">Pripravené</span>
+                        </>
                     )}
                 </div>
             </div>
