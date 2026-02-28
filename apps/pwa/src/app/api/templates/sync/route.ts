@@ -165,22 +165,20 @@ export async function POST(req: Request) {
         console.log(`[DropboxSync] Checkpoint 4.b: Scanned ${count} files. Created ${newInboxItems} new Inbox items.`);
 
         // ONLY Update timestamp if finished
-        if (!response.result.has_more) {
-            console.log("[DropboxSync] Sync finished. Updating timestamp.");
-            // @ts-ignore
-            await prisma.setting.upsert({
-                where: { id: 'LAST_DROPBOX_SYNC' },
-                update: { value: new Date().toISOString(), category: 'SYSTEM' },
-                create: { id: 'LAST_DROPBOX_SYNC', value: new Date().toISOString(), category: 'SYSTEM' }
-            });
+        console.log("[DropboxSync] Sync step finished. Updating timestamp.");
+        // @ts-ignore
+        await prisma.setting.upsert({
+            where: { id: 'LAST_DROPBOX_SYNC' },
+            update: { value: new Date().toISOString(), category: 'SYSTEM' },
+            create: { id: 'LAST_DROPBOX_SYNC', value: new Date().toISOString(), category: 'SYSTEM' }
+        });
 
-            // @ts-ignore
-            await prisma.setting.upsert({
-                where: { id: 'LAST_DROPBOX_SYNC_STATUS' },
-                update: { value: 'OK', category: 'SYSTEM' },
-                create: { id: 'LAST_DROPBOX_SYNC_STATUS', value: 'OK', category: 'SYSTEM' }
-            });
-        }
+        // @ts-ignore
+        await prisma.setting.upsert({
+            where: { id: 'LAST_DROPBOX_SYNC_STATUS' },
+            update: { value: 'OK', category: 'SYSTEM' },
+            create: { id: 'LAST_DROPBOX_SYNC_STATUS', value: 'OK', category: 'SYSTEM' }
+        });
 
         return NextResponse.json({
             success: true,

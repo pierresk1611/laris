@@ -129,18 +129,28 @@ export default function TemplatesPage() {
         setIsSyncing(true);
 
         const triggerScan = async () => {
-            const response = await fetch('/api/templates/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({})
-            });
+            let hasMore = true;
+            let currentCursor: string | undefined = undefined;
+            let totalNewItems = 0;
 
-            const data = await response.json();
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || data.error || 'Chyba pri synchronizácii.');
+            while (hasMore) {
+                const apiResponse: Response = await fetch('/api/templates/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cursor: currentCursor })
+                });
+
+                const responseData: any = await apiResponse.json();
+                if (!apiResponse.ok || !responseData.success) {
+                    throw new Error(responseData.message || responseData.error || 'Chyba pri synchronizácii.');
+                }
+
+                hasMore = responseData.hasMore;
+                currentCursor = responseData.cursor;
+                totalNewItems += responseData.count || 0;
             }
 
-            return { message: data.message || 'Hĺbkový sken dokončený úspešne.' };
+            return { message: `Sken dokončený. Nájdených ${totalNewItems} nových súborov.` };
         };
 
         toast.promise(triggerScan(), {
