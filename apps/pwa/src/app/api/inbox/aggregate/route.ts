@@ -80,14 +80,18 @@ export async function POST(req: Request) {
                 // Determine Name - if V2, we might want to use the [Name] part
                 const templateName = v2MatchForName ? v2MatchForName[3].replace(/_/g, ' ') : basename.replace(/_/g, ' ');
 
+                // Naming convention V2 templates are implicitly verified and active
+                const initialStatus = v2MatchForName ? 'ACTIVE' : 'UNVERIFIED';
+                const initialVerified = !!v2MatchForName;
+
                 // Create NEW Template
                 // @ts-ignore
                 const newTemplate = await prisma.template.create({
                     data: {
                         key: templateKeyToCheck,
                         name: templateName,
-                        status: 'UNVERIFIED', // Needs Agent Scan
-                        isVerified: false,
+                        status: initialStatus,
+                        isVerified: initialVerified,
                         imageUrl: mainPreview ? (await getPublicUrl(mainPreview.path)) : null
                     }
                 });
