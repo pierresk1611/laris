@@ -129,32 +129,31 @@ export default function TemplatesPage() {
         setIsSyncing(true);
 
         const triggerScan = async () => {
-            const response = await fetch('/api/templates/scan', {
-                method: 'POST'
+            const response = await fetch('/api/templates/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
             });
 
-            if (!response.ok) {
-                throw new Error('Nepodarilo sa vytvoriť úlohu skenovania.');
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || data.error || 'Chyba pri synchronizácii.');
             }
 
-            const data = await response.json();
-            if (!data.success) throw new Error(data.error || 'Chyba pri vytváraní úlohy.');
-
-            return { message: 'Úloha odoslaná Agentovi. Skenovanie prebieha na pozadí.' };
+            return { message: data.message || 'Hĺbkový sken dokončený úspešne.' };
         };
 
         toast.promise(triggerScan(), {
-            loading: 'Odosielam príkaz Agentovi...',
+            loading: 'Prehľadávam Dropbox a sťahujem súbory...',
             success: (data) => {
-                // Poll for updates or just let the swr/polling handle it
-                // We'll reset syncing state after a short delay to allow UI to show "Success"
+                fetchData();
                 setTimeout(() => setIsSyncing(false), 2000);
                 return data.message;
             },
             error: (err: any) => {
                 setIsSyncing(false);
-                console.error('[ScanError]', err);
-                return 'Chyba: Agent nie je dostupný alebo nastala chyba.';
+                console.error('[SyncError]', err);
+                return `Chyba: ${err.message}`;
             }
         });
     };
