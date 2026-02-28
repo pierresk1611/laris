@@ -32,6 +32,8 @@ interface Template {
     status: string;
     isVerified: boolean;
     imageUrl?: string | null;
+    alias?: string;
+    variants?: any[];
 }
 
 interface InboxItem {
@@ -515,8 +517,27 @@ export default function TemplatesPage() {
                                                 <MoreHorizontal size={20} />
                                             </button>
                                         </div>
-                                        <h3 className="text-lg font-black text-slate-900 mb-1">{template.key}</h3>
-                                        <p className="text-xs font-medium text-slate-500 mb-6 line-clamp-2">{template.name}</p>
+                                        <div className="flex items-baseline justify-between mb-1">
+                                            <h3 className="text-lg font-black text-slate-900 truncate pr-2" title={template.alias || template.name || template.key}>
+                                                {template.alias || template.name || template.key}
+                                            </h3>
+                                            {(template.alias || (template.name && template.name !== template.key)) && (
+                                                <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase shrink-0">
+                                                    SKU: {template.key}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {/* If it has variants, we can show a small badge */}
+                                        <div className="flex items-center justify-between mb-6">
+                                            <p className="text-xs font-medium text-slate-500 line-clamp-1 truncate w-full pr-2">
+                                                {template.alias ? template.name : "Originál"}
+                                            </p>
+                                            {template.variants && template.variants.length > 0 && (
+                                                <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded uppercase shrink-0">
+                                                    +{template.variants.length}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex items-center justify-between pt-4 border-t border-slate-50 mt-auto">
                                             <div className="flex items-center gap-2">
                                                 <FolderOpen size={14} className="text-slate-400" />

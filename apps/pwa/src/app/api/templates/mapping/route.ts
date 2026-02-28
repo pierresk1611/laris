@@ -14,7 +14,12 @@ export async function GET(request: Request) {
             where: { key }
         });
 
-        return NextResponse.json({ success: true, mapping: template?.mappingData || null });
+        return NextResponse.json({
+            success: true,
+            mapping: template?.mappingData || null,
+            alias: template?.alias || null,
+            variants: template?.variants || []
+        });
     } catch (error: any) {
         console.error("[TemplateMapping] GET Error:", error);
         return NextResponse.json({ success: false, error: 'Database error', details: error?.message || String(error) }, { status: 503 });

@@ -126,9 +126,15 @@ export async function POST(req: Request) {
             // Regex Match pre nový formát: ^ad_(.*?)_([OP])_(.*)$
             const v2Match = nameWithoutExt.match(/^ad_(.*?)_([OP])_(.*)$/i);
 
+            // Fallback Match pre staršie formáty: napr. 2022_18_P alebo 2023_31_O
+            const oldMatch = nameWithoutExt.match(/^(.*?)_([OP])$/i);
+
             if (v2Match) {
                 // Kľúčom pre šablónu je teraz stredný kód (SKU)
                 potentialKey = v2Match[1].toUpperCase();
+            } else if (oldMatch) {
+                // Odtrhneme koncovku _O alebo _P
+                potentialKey = oldMatch[1].replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
             }
 
             // Check 1: Is it already an active template?

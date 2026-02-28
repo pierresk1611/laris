@@ -30,6 +30,8 @@ model Template {
   status       String   @default("ACTIVE")
   isVerified   Boolean  @default(false)
   imageUrl     String?
+  alias        String?  // Display Name / User customized alias
+  variants     Json?    @default("[]") // Array of { type, path, extension, imageUrl? }
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

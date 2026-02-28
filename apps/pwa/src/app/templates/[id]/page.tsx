@@ -12,7 +12,10 @@ import {
     Hash,
     Type,
     CheckCircle2,
-    AlertCircle
+    AlertCircle,
+    Edit2,
+    Check,
+    X
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,6 +31,9 @@ export default function TemplateDetailPage() {
     const [isLoadingLayers, setIsLoadingLayers] = useState(false);
     const [layers, setLayers] = useState<PsdLayer[]>([]);
     const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [alias, setAlias] = useState<string>('');
+    const [isEditingAlias, setIsEditingAlias] = useState(false);
+    const [isSavingAlias, setIsSavingAlias] = useState(false);
 
     // Load existing mapping from DB
     useEffect(() => {
@@ -35,14 +41,14 @@ export default function TemplateDetailPage() {
             try {
                 const res = await fetch(`/api/templates/mapping?key=${encodeURIComponent(params.id as string)}`, { cache: 'no-store' });
                 const data = await res.json();
-                if (data.success && data.mapping) {
-                    // Convert mappingData JSON to layers array if needed, 
-                    // but for now we just handle it when the agent loads them.
-                    // If we have saved mappings, we keep them for when layers are loaded.
-                    setLayers(prev => prev.map(l => ({
-                        ...l,
-                        mappedTo: data.mapping[l.name] || l.mappedTo
-                    })));
+                if (data.success) {
+                    if (data.alias) setAlias(data.alias);
+                    if (data.mapping) {
+                        setLayers(prev => prev.map(l => ({
+                            ...l,
+                            mappedTo: data.mapping[l.name] || l.mappedTo
+                        })));
+                    }
                 }
             } catch (e) {
                 console.error("Mapping load failed", e);
@@ -50,6 +56,29 @@ export default function TemplateDetailPage() {
         };
         loadMapping();
     }, [params.id]);
+
+    const handleSaveAlias = async () => {
+        setIsSavingAlias(true);
+        try {
+            const keyId = decodeURIComponent(params.id as string);
+            const res = await fetch('/api/templates/rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: keyId, newAlias: alias })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Názov šablóny bol upravený");
+                setIsEditingAlias(false);
+            } else {
+                toast.error(data.error || "Chyba premenovania");
+            }
+        } catch (e) {
+            toast.error("Nepodarilo sa uložiť");
+        } finally {
+            setIsSavingAlias(false);
+        }
+    };
 
     const handleSaveMapping = async () => {
         const mappingData: Record<string, string> = {};
@@ -157,8 +186,41 @@ export default function TemplateDetailPage() {
                                 <FileType className="text-blue-500" size={32} />
                             </div>
                             <div>
-                                <h3 className="text-xl font-black text-slate-900">{params.id}</h3>
-                                <p className="text-sm font-medium text-slate-500">PSD Šablóna</p>
+                                {isEditingAlias ? (
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <input
+                                            autoFocus
+                                            value={alias}
+                                            onChange={e => setAlias(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleSaveAlias()}
+                                            className="text-xl font-black text-slate-900 border-b-2 border-blue-500 bg-blue-50/50 outline-none w-full px-1"
+                                            placeholder="Nový názov..."
+                                            disabled={isSavingAlias}
+                                        />
+                                        <button onClick={handleSaveAlias} disabled={isSavingAlias} className="p-1 text-green-600 hover:bg-green-50 rounded">
+                                            <Check size={18} />
+                                        </button>
+                                        <button onClick={() => setIsEditingAlias(false)} disabled={isSavingAlias} className="p-1 text-slate-400 hover:bg-slate-50 rounded">
+                                            <X size={18} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2 mb-1 group">
+                                        <h3 className="text-xl font-black text-slate-900">{alias || decodeURIComponent(params.id as string)}</h3>
+                                        <button
+                                            onClick={() => {
+                                                if (!alias) setAlias(decodeURIComponent(params.id as string));
+                                                setIsEditingAlias(true);
+                                            }}
+                                            className="p-1.5 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                                        >
+                                            <Edit2 size={16} />
+                                        </button>
+                                    </div>
+                                )}
+                                <p className="text-sm font-medium text-slate-500">
+                                    PSD Šablóna {alias ? <span className="ml-1 opacity-50 px-2 rounded bg-slate-100 text-[10px] uppercase">SKU: {decodeURIComponent(params.id as string)}</span> : ''}
+                                </p>
                             </div>
                         </div>
 
