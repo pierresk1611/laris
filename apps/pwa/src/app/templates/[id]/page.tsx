@@ -340,23 +340,6 @@ export default function TemplateDetailPage() {
                 setLayers(newLayers);
                 setStatus('success');
                 toast.success(`Načítaných ${data.textLayerCount} textových vrstiev.`);
-            } else if (data.requiresAgent) {
-                // Fallback for .ai files or other agent-only tasks
-                const jobRes = await fetch('/api/agent/jobs', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        type: 'EXTRACT_LAYERS',
-                        payload: { templateId: decodeURIComponent(params.id as string) }
-                    })
-                });
-                const jobData = await jobRes.json();
-                if (jobData.success) {
-                    toast.info("Tento formát vyžaduje Agenta. Úloha bola odoslaná do fronty.");
-                } else {
-                    throw new Error("Nepodarilo sa vytvoriť úlohu pre Agenta.");
-                }
-                setStatus('idle');
             } else {
                 throw new Error(data.error || "Chyba pri extrakcii vrstiev.");
             }
@@ -391,7 +374,7 @@ export default function TemplateDetailPage() {
                             }}
                             className={`px-6 py-2.5 rounded-xl text-sm font-black tracking-widest uppercase transition-all ${activeVariantType === v.type ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
                         >
-                            {v.type === 'MAIN' ? '📄 Hlavné Oznámenie' : v.type === 'INVITE' ? '✉️ Pozvánka k stolu' : v.type}
+                            {v.type === 'MAIN' ? '📄 Oznámenie' : v.type === 'INVITE' ? '✉️ Pozvánka' : v.type === 'NAME_TAG' ? '🏷️ Menovka' : v.type}
                         </button>
                     ))}
                 </div>
@@ -535,8 +518,8 @@ export default function TemplateDetailPage() {
                                             onClick={handleLoadLayers}
                                             disabled={isLoadingLayers || (!isCurrentPsd && !hasAnyPsd)}
                                             className={`w-full py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition shadow-lg active:scale-[0.98] ${isLoadingLayers || (!isCurrentPsd && !hasAnyPsd)
-                                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                : 'bg-slate-900 text-white hover:bg-slate-800'
                                                 }`}
                                         >
                                             <RefreshCw className={isLoadingLayers ? 'animate-spin' : ''} size={20} />

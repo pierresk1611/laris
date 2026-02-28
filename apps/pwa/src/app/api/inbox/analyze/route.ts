@@ -32,17 +32,21 @@ export async function POST(req: Request) {
 
         const prompt = `
         Si inteligentný klasifikátor grafických súborov pre tlačiareň. Tvojou úlohou je roztriediť zoznam súborov do 3 kategórií: TEMPLATE, DOCUMENT, IGNORE.
-        Odovzdáš VÝHRADNE čistý JSON objekt (bez markdown blokov \`\`\`), kde klúčom je presný názov súboru a hodnotou objekt { "category": "KATEGORIA", "reasoning": "Krátke zdôvodnenie v slovenčine" }.
+        Navyše musíš identifikovať súbory, ktoré k sebe patria (napr. PSD predloha a jej PNG náhľad).
+
+        Odovzdáš VÝHRADNE čistý JSON objekt (bez markdown blokov \`\`\`), kde klúčom je presný názov súboru a hodnotou objekt:
+        { 
+          "category": "KATEGORIA", 
+          "reasoning": "Zdôvodnenie",
+          "group_id": "Spoločný identifikátor pre súvisiace súbory (napr. SKU alebo kmeň názvu)"
+        }
         
         Pravidlá klasifikácie:
-        1. TEMPLATE: Dizajnové súbory (hlavne .psd, .ai, .png, .jpg), ktoré slúžia ako šablóny produktov.
-           - POZOR: Všeobecne známe kódové označenia obsahujú čísla/roky (napr. JSO 15, ad_2026_O_nazov, atď.).
-           - PREFIX ZLUČOVANIE (Veľmi dôležité): Ak v zozname vidíš súbor s podobným názvom ale končiaci na "_metal", "_mask", "_gold" atď. (napríklad "8.ai" a "8_metal.pdf"), MUSÍŠ ten metalický pod-súbor tiež označiť ako TEMPLATE a do reasoning uviesť: "Súčasť šablóny (maska)". Patria totiž k sebe!
-        2. DOCUMENT: Kancelárske súbory, PDF faktúry, dodacie listy, excel tabuľky, manuály k tlači.
-        3. IGNORE: Systémové súbory (napr. .DS_Store), náhľadové mockup fotky nepatriace k produktu, úplný odpad.
-
-        Príklady z minulosti:
-        ${exampleText}
+        1. TEMPLATE: Dizajnové súbory (.psd, .ai, .psdt, .png, .jpg), ktoré slúžia ako šablóny produktov.
+           - Ak vidíš "Pozvanka na...", je to TEMPLATE.
+           - Súbory so spoločným kódom v názve (napr. 2025_41) označi rovnakým "group_id".
+        2. DOCUMENT: Faktúry, PDF dodacie listy, excel tabuľky, manuály.
+        3. IGNORE: Systémové súbory (.DS_Store), mockup fotky.
 
         Súbory na klasifikáciu:
         ${filesToAnalyze}
@@ -51,7 +55,7 @@ export async function POST(req: Request) {
         // 3. Call AI
         const aiResponse = await groq.chat.completions.create({
             messages: [{ role: 'user', content: prompt }],
-            model: "llama-3.3-70b-versatile", // Versatile and good reasoning
+            model: "llama-3.3-70b-versatile",
             temperature: 0.1,
             response_format: { type: "json_object" }
         });

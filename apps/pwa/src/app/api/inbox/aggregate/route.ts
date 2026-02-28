@@ -14,37 +14,40 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: true, message: 'No items to aggregate.', count: 0 });
         }
 
-        // 2. Group by Basename
-        // Map<Basename, { source: Item[], preview: Item[], others: Item[] }>
+        // 2. Group by Pattern & SKU
         const groups = new Map();
-
-        // Regex to strip extensions and common suffixes like _preview, _thumb, etc if needed.
-        // For now, strict basename check: "8.ai" -> "8"
 
         for (const item of items) {
             const name = item.name;
             const ext = item.extension.toLowerCase();
-            const basename = name.substring(0, name.lastIndexOf('.'));
+            const nameWithoutExt = name.includes('.') ? name.substring(0, name.lastIndexOf('.')) : name;
 
-            // Naming Convention v2 -> ad_[SKU]_[O/P]_[Name]
-            const v2Match = basename.match(/^ad_(.*?)_([OP])_(.*)$/i);
+            // Rule 1: "Pozvanka na..." detection
+            const isInvitation = name.toLowerCase().startsWith('pozvanka na');
 
-            // Grouping key: either SKU (if V2) or basename (if old format)
-            const groupKey = v2Match ? v2Match[1].toUpperCase() : basename;
+            // Rule 2: SKU Extraction (from end or prefix)
+            // Pattern: ad_[SKU]_[O/P]_[Name] or just SKU at the end
+            const v2Match = nameWithoutExt.match(/^ad_(.*?)_([OP])_(.*)$/i);
+            const skuMatch = nameWithoutExt.match(/(?:^|[_ ])([A-Z0-9]{3,})(_[OP])?$/i); // Generic SKU match
+
+            const sku = v2Match ? v2Match[1].toUpperCase() : (skuMatch ? skuMatch[1].toUpperCase() : nameWithoutExt);
+            const variantSuffix = v2Match ? v2Match[2].toUpperCase() : (skuMatch && skuMatch[2] ? skuMatch[2].substring(1).toUpperCase() : 'O');
+
+            const groupKey = isInvitation ? `INVITATION_${sku}` : sku;
 
             if (!groups.has(groupKey)) {
-                groups.set(groupKey, { source: [], preview: [], others: [] });
+                groups.set(groupKey, {
+                    name: isInvitation ? `Pozvánka - ${sku}` : sku,
+                    sku: sku,
+                    files: []
+                });
             }
 
             const group = groups.get(groupKey);
-
-            if (['.ai', '.psd', '.psb', '.pdf'].includes(ext)) {
-                group.source.push(item);
-            } else if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
-                group.preview.push(item);
-            } else {
-                group.others.push(item);
-            }
+            group.files.push({
+                item,
+                type: variantSuffix === 'P' ? 'INVITE' : 'MAIN'
+            });
         }
 
         console.log(`[InboxAggregate] Found ${groups.size} potential groups.`);
@@ -53,72 +56,70 @@ export async function POST(req: Request) {
         let processedFileIds: string[] = [];
 
         // 3. Process Groups
-        for (const [basename, group] of groups) {
-            // Rule: We need at least one SOURCE file to make a template. 
-            // If we only have JPGs, it's just images, not a template.
-            if (group.source.length === 0) continue;
+        for (const [groupKey, data] of groups) {
+            const files = data.files;
 
-            // Pick the "Best" source (AI > PSD > PDF)
-            const mainSource = group.source.find((i: any) => i.extension === '.ai')
-                || group.source.find((i: any) => i.extension === '.psd')
-                || group.source[0];
+            // Check if we have an active template with this SKU/Key
+            const existingTemplate = await prisma.template.findUnique({
+                where: { key: data.sku },
+                include: { files: true }
+            }) as any;
 
-            // Pick "Best" preview (JPG > PNG)
-            const mainPreview = group.preview.find((i: any) => i.extension === '.jpg')
-                || group.preview[0];
-
-            // Template Key sanitation
-            const key = basename.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
-
-            // Check existence (We use groupKey to check against V2 SKU if matched)
-            const v2MatchForName = basename.match(/^ad_(.*?)_([OP])_(.*)$/i);
-            const templateKeyToCheck = v2MatchForName ? v2MatchForName[1].toUpperCase() : key;
-
-            const existingTemplate = await prisma.template.findUnique({ where: { key: templateKeyToCheck } });
+            let templateId = existingTemplate?.id;
 
             if (!existingTemplate) {
-                // Determine Name - if V2, we might want to use the [Name] part
-                const templateName = v2MatchForName ? v2MatchForName[3].replace(/_/g, ' ') : basename.replace(/_/g, ' ');
+                // Create Template if it has at least one graphic source
+                const hasSource = files.some((f: any) => ['.ai', '.psd', '.psdt'].includes(f.item.extension.toLowerCase()));
+                if (!hasSource) continue;
 
-                // Naming convention V2 templates are implicitly verified and active
-                const initialStatus = v2MatchForName ? 'ACTIVE' : 'UNVERIFIED';
-                const initialVerified = !!v2MatchForName;
+                const mainPreview = files.find((f: any) => ['.jpg', '.png'].includes(f.item.extension.toLowerCase()));
 
-                // Create NEW Template
-                // @ts-ignore
                 const newTemplate = await prisma.template.create({
                     data: {
-                        key: templateKeyToCheck,
-                        name: templateName,
-                        status: initialStatus,
-                        isVerified: initialVerified,
-                        imageUrl: mainPreview ? (await getPublicUrl(mainPreview.path)) : null
+                        key: data.sku,
+                        name: data.name,
+                        displayName: data.name,
+                        status: 'ACTIVE',
+                        isVerified: false,
+                        imageUrl: null // Will be handled by TemplateFile logic later
                     }
                 });
+                templateId = newTemplate.id;
                 createdCount++;
-
-                // Trigger Layer Scan Job
-                if (mainSource) {
-                    // @ts-ignore
-                    await prisma.job.create({
-                        data: {
-                            type: 'SCAN_LAYERS',
-                            status: 'PENDING',
-                            payload: {
-                                templateKey: key,
-                                templateId: newTemplate.id,
-                                path: mainSource.path, // Dropbox path e.g. /TEMPLATES/8.ai
-                                filename: mainSource.name
-                            }
-                        }
-                    });
-                    console.log(`[InboxAggregate] Created SCAN_LAYERS job for ${key}`);
-                }
             }
 
-            // Mark items as PROCESSED
-            const allInGroup = [...group.source, ...group.preview, ...group.others];
-            processedFileIds.push(...allInGroup.map((i: any) => i.id));
+            // Upsert TemplateFiles for each file in group
+            for (const fileObj of files) {
+                const item = fileObj.item;
+                const ext = item.extension.toLowerCase();
+                const isSource = ['.ai', '.psd', '.psdt'].includes(ext);
+
+                await prisma.templateFile.upsert({
+                    where: {
+                        templateId_type: {
+                            templateId: templateId,
+                            type: fileObj.type
+                        }
+                    },
+                    update: {
+                        path: item.path,
+                        extension: ext
+                    },
+                    create: {
+                        templateId: templateId,
+                        type: fileObj.type,
+                        path: item.path,
+                        extension: ext
+                    }
+                });
+
+                processedFileIds.push(item.id);
+
+                // Queue scan if it is PSD
+                if (ext === '.psd' || ext === '.psdt') {
+                    // Logic to trigger/queue layer extraction could go here
+                }
+            }
         }
 
         // 4. Batch Update Inbox Status

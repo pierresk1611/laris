@@ -113,10 +113,11 @@ export async function POST(req: Request) {
                 }, { status: 400 });
             }
 
+            // For AI files, we still can't use ag-psd, but we should inform the user to use PSD or wait for Print Agent for PDF.
+            // But per user request: "Zrušenie Agenta pre mapovanie".
             return NextResponse.json({
                 success: false,
-                error: 'Cloud extraction podporuje len .psd a .psdt súbory. Pre .ai súbory použite Agenta.',
-                requiresAgent: ext === 'ai'
+                error: 'Mapovanie vrstiev v cloude podporuje len .psd/.psdt. Pre .ai súbory prosím uložte kópiu ako .psd.',
             });
         }
 

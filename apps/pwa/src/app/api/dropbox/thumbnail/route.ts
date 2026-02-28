@@ -53,6 +53,7 @@ export async function POST(req: Request) {
         }
 
         // Get thumbnail
+        // Dropbox get_thumbnail_v2 supports: jpg, png, tiff, tif, gif, bmp, webp, ai, psd, psb
         const response: any = await dbx.filesGetThumbnailV2({
             resource: {
                 ".tag": "path",
