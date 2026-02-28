@@ -145,6 +145,10 @@ export default function TemplatesPage() {
     const [isBulkMapping, setIsBulkMapping] = useState(false);
     const [bulkProgress, setBulkProgress] = useState<{ percentage: number, label: string, status: string } | null>(null);
 
+    // Multi-selection state
+    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+    const [isBulkClassifying, setIsBulkClassifying] = useState(false);
+
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -309,6 +313,11 @@ export default function TemplatesPage() {
     const handleClassify = async (id: string, action: 'TEMPLATE' | 'DOCUMENT' | 'IGNORE') => {
         // Optimistic update
         setInboxItems(prev => prev.filter(i => i.id !== id));
+        setSelectedItems(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
 
         try {
             const res = await fetch('/api/inbox/classify', {
@@ -326,13 +335,62 @@ export default function TemplatesPage() {
 
             // Refetch to see new template if added
             if (action === 'TEMPLATE') {
-                // Short delay to allow DB propagation if needed, or just fetch templates only
                 fetchData();
             }
 
         } catch (e) {
             toast.error("Nepodarilo sa uložiť akciu.");
             fetchData(); // Revert
+        }
+    };
+
+    const handleBulkClassify = async (action: 'TEMPLATE' | 'DOCUMENT' | 'IGNORE') => {
+        if (selectedItems.size === 0) return;
+
+        setIsBulkClassifying(true);
+        const ids = Array.from(selectedItems);
+
+        toast.promise(
+            (async () => {
+                const res = await fetch('/api/inbox/bulk-classify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids, action })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) throw new Error(data.error || "Chyba API");
+                return data;
+            })(),
+            {
+                loading: `Spracovávam ${selectedItems.size} súborov...`,
+                success: (data) => {
+                    setSelectedItems(new Set());
+                    fetchData();
+                    setIsBulkClassifying(false);
+                    return `Úspešne spracovaných ${ids.length} súborov.`;
+                },
+                error: (err) => {
+                    setIsBulkClassifying(false);
+                    return `Chyba: ${err.message}`;
+                }
+            }
+        );
+    };
+
+    const toggleSelectItem = (id: string) => {
+        setSelectedItems(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedItems.size === inboxItems.length) {
+            setSelectedItems(new Set());
+        } else {
+            setSelectedItems(new Set(inboxItems.map(i => i.id)));
         }
     };
 
@@ -473,35 +531,66 @@ export default function TemplatesPage() {
                 <div className="flex items-center gap-3 w-full md:w-auto">
                     {activeTab === 'INBOX' && (
                         <>
-                            <button
-                                onClick={async () => {
-                                    toast.promise(
-                                        fetch('/api/inbox/aggregate', { method: 'POST' }).then(r => r.json()),
-                                        {
-                                            loading: 'Analyzujem a zlučujem súbory...',
-                                            success: (data) => {
-                                                fetchData();
-                                                return data.message;
-                                            },
-                                            error: 'Chyba pri agregácii'
-                                        }
-                                    );
-                                }}
-                                disabled={inboxItems.length === 0}
-                                className="flex items-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
-                            >
-                                <Layers size={16} />
-                                <span>Auto-Mapping</span>
-                            </button>
+                            {selectedItems.size > 0 ? (
+                                <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-right-1 tracking-tighter">
+                                    <span className="text-xs font-black text-blue-700 uppercase mr-2">{selectedItems.size} vybraných:</span>
+                                    <button
+                                        onClick={() => handleBulkClassify('TEMPLATE')}
+                                        disabled={isBulkClassifying}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-green-700 transition-all shadow-md active:scale-95"
+                                    >
+                                        <Layers size={12} />
+                                        Šablóna
+                                    </button>
+                                    <button
+                                        onClick={() => handleBulkClassify('IGNORE')}
+                                        disabled={isBulkClassifying}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase hover:bg-red-600 transition-all shadow-md active:scale-95"
+                                    >
+                                        <Trash2 size={12} />
+                                        Ignorovať
+                                    </button>
+                                    <div className="w-[1px] h-4 bg-blue-200 mx-1" />
+                                    <button
+                                        onClick={() => setSelectedItems(new Set())}
+                                        className="text-[10px] font-black text-blue-500 hover:text-blue-700 uppercase"
+                                    >
+                                        Zrušiť
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={async () => {
+                                            toast.promise(
+                                                fetch('/api/inbox/aggregate', { method: 'POST' }).then(r => r.json()),
+                                                {
+                                                    loading: 'Analyzujem a zlučujem súbory...',
+                                                    success: (data) => {
+                                                        fetchData();
+                                                        return data.message;
+                                                    },
+                                                    error: 'Chyba pri agregácii'
+                                                }
+                                            );
+                                        }}
+                                        disabled={inboxItems.length === 0}
+                                        className="flex items-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
+                                    >
+                                        <Layers size={16} />
+                                        <span>Auto-Mapping</span>
+                                    </button>
 
-                            <button
-                                onClick={runAiAnalysis}
-                                disabled={isAnalyzing || inboxItems.length === 0}
-                                className={`flex items-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-2xl text-sm font-bold hover:bg-purple-700 transition-all shadow-xl shadow-purple-200 ${isAnalyzing ? 'opacity-70' : ''}`}
-                            >
-                                {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-                                <span>AI Triedenie</span>
-                            </button>
+                                    <button
+                                        onClick={runAiAnalysis}
+                                        disabled={isAnalyzing || inboxItems.length === 0}
+                                        className={`flex items-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-2xl text-sm font-bold hover:bg-purple-700 transition-all shadow-xl shadow-purple-200 ${isAnalyzing ? 'opacity-70' : ''}`}
+                                    >
+                                        {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                                        <span>AI Triedenie</span>
+                                    </button>
+                                </>
+                            )}
                         </>
                     )}
 
@@ -621,9 +710,9 @@ export default function TemplatesPage() {
                                                     <span className="text-[10px] font-bold text-slate-500">{template.mappedPaths} polí</span>
                                                 </div>
                                                 <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${template.status === 'ACTIVE' ? 'bg-green-50 text-green-600' :
-                                                        template.status === 'NEEDS_REVIEW' ? 'bg-amber-50 text-amber-600' :
-                                                            template.status === 'WARNING_NO_PDF' ? 'bg-red-100 text-red-700 animate-pulse border border-red-200' :
-                                                                'bg-red-50 text-red-600'
+                                                    template.status === 'NEEDS_REVIEW' ? 'bg-amber-50 text-amber-600' :
+                                                        template.status === 'WARNING_NO_PDF' ? 'bg-red-100 text-red-700 animate-pulse border border-red-200' :
+                                                            'bg-red-50 text-red-600'
                                                     }`}>
                                                     {template.status === 'ACTIVE' ? 'Aktívna' :
                                                         template.status === 'NEEDS_REVIEW' ? 'Zdieľaná (Kontrola)' :
@@ -652,7 +741,15 @@ export default function TemplatesPage() {
                             <table className="w-full text-left">
                                 <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
                                     <tr>
-                                        <th className="px-6 py-4">Súbor</th>
+                                        <th className="px-6 py-4 w-10">
+                                            <input
+                                                type="checkbox"
+                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                                                checked={inboxItems.length > 0 && selectedItems.size === inboxItems.length}
+                                                onChange={toggleSelectAll}
+                                            />
+                                        </th>
+                                        <th className="px-6 py-4">Súbor a Cesta</th>
                                         <th className="px-6 py-4">AI Návrh</th>
                                         <th className="px-6 py-4 text-right">Akcia</th>
                                     </tr>
@@ -696,16 +793,24 @@ export default function TemplatesPage() {
                                                     const isAiIgnore = item.prediction?.category === 'IGNORE';
 
                                                     return (
-                                                        <tr key={item.id} className={`hover:bg-blue-50/30 transition-colors group ${hasMultiple ? 'bg-white' : ''}`}>
+                                                        <tr key={item.id} className={`hover:bg-blue-50/30 transition-colors group ${hasMultiple ? 'bg-white' : ''} ${selectedItems.has(item.id) ? 'bg-blue-50/50' : ''}`}>
+                                                            <td className="px-6 py-4">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                                                                    checked={selectedItems.has(item.id)}
+                                                                    onChange={() => toggleSelectItem(item.id)}
+                                                                />
+                                                            </td>
                                                             <td className="px-6 py-4">
                                                                 <div className="flex items-center gap-3">
                                                                     {/* Use Thumbnail Viewer instead of icon */}
                                                                     <ThumbnailViewer path={item.path} extension={item.extension} />
 
-                                                                    <div>
-                                                                        <div className="font-bold text-slate-900 text-sm">{item.name}</div>
-                                                                        <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1 max-w-[250px] truncate" title={item.path}>
-                                                                            <FolderOpen size={10} className="shrink-0" />
+                                                                    <div className="min-w-0">
+                                                                        <div className="font-bold text-slate-900 text-sm truncate max-w-[400px]" title={item.name}>{item.name}</div>
+                                                                        <div className="text-[10px] text-slate-500 font-mono mt-1 flex items-center gap-1.5 bg-slate-100/50 px-2 py-1 rounded inline-flex border border-slate-200/50 hover:bg-slate-100 transition-colors" title={item.path}>
+                                                                            <FolderOpen size={10} className="text-slate-400 shrink-0" />
                                                                             <span className="truncate">{item.path.replace(`/${item.name}`, '') || '/'}</span>
                                                                         </div>
                                                                     </div>

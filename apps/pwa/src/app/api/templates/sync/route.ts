@@ -107,7 +107,7 @@ export async function POST(req: Request) {
 
         console.log(`[DropboxSync] Checkpoint 3.c: Found ${validFiles.length} potential graphic inbox items.`);
 
-        // 4. Process into FileInbox
+        // 4. Process into FileInbox (Clean Slate mode)
         console.log("[DropboxSync] Checkpoint 4: Processing into FileInbox...");
         let totalCount = accumulatedCount;
         let newInboxItems = 0;
@@ -115,124 +115,20 @@ export async function POST(req: Request) {
         for (const entry of validFiles) {
             const name = entry.name;
             const pathDisplay = entry.path_display || entry.path_lower || name;
-            const extension = name.includes('.') ? name.substring(name.lastIndexOf('.')) : '';
+            const extension = name.includes('.') ? name.substring(name.lastIndexOf('.')).toLowerCase() : '';
 
-            // Check if this file is already a known TEMPLATE (Active)
-            // Naming Convention v2: ad_[SKU]_[O/P]_[Name].psd
-            const nameWithoutExt = name.substring(0, name.lastIndexOf('.'));
-
-            // Extract SKU if present in format "SKU: xxx" or "SKU_xxx"
-            let extractedSku: string | null = null;
-            const skuMatch = nameWithoutExt.match(/SKU[:_]\s*([a-zA-Z0-9_-]+)/i);
-            if (skuMatch) {
-                extractedSku = skuMatch[1].trim();
-            }
-
-            // Clean name for key/display (remove SKU part)
-            const cleanNameForMatch = nameWithoutExt.replace(/SKU[:_]\s*[a-zA-Z0-9_-]+/i, '').trim();
-
-            let potentialKey = cleanNameForMatch.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
-
-            // Regex Match pre nový formát: ^ad_(.*?)_([OP])_(.*)$
-            const v2Match = cleanNameForMatch.match(/^ad_(.*?)_([OP])_(.*)$/i);
-
-            // Fallback Match pre staršie formáty (s podtržníkom): napr. 2022_18_P alebo 2023_31_O
-            const oldMatch = cleanNameForMatch.match(/^(.*?)_([OP])$/i);
-
-            // Aggressive Match pre staré formáty bez podtržníka: napr. NO34P, NO34O
-            const aggressiveMatch = cleanNameForMatch.match(/^([A-Z0-9_-]+?)([OP])$/i);
-
-            let variantType = 'MAIN';
-
-            if (v2Match) {
-                potentialKey = v2Match[1].toUpperCase();
-                variantType = v2Match[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
-            } else if (oldMatch) {
-                potentialKey = oldMatch[1].replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
-                variantType = oldMatch[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
-            } else if (aggressiveMatch && !cleanNameForMatch.includes('_')) {
-                potentialKey = aggressiveMatch[1].toUpperCase();
-                variantType = aggressiveMatch[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
-            } else if (cleanNameForMatch.toUpperCase().endsWith('_P')) {
-                variantType = 'INVITE';
-            }
-
-            const finalKey = extractedSku || potentialKey;
-
-            // Check 1: Is it already an active template?
-            const existingTemplate = await prisma.template.findUnique({ where: { key: finalKey } }) as any;
-
-            if (existingTemplate) {
-                // Update Template metadata if needed (displayName, sku)
-                await prisma.template.update({
-                    where: { id: existingTemplate.id },
-                    data: {
-                        sku: existingTemplate.sku || extractedSku,
-                        displayName: existingTemplate.displayName || cleanNameForMatch.replace(/_/g, ' ')
-                    }
-                });
-
-                // Relational Upsert: Ensure the file exists in the dedicated TemplateFile table
-                console.log(`[SYNC] Updating Variant ${variantType} for Template ${finalKey} with Path: ${pathDisplay}`);
-                await prisma.templateFile.upsert({
-                    where: {
-                        templateId_type: {
-                            templateId: existingTemplate.id,
-                            type: variantType
-                        }
-                    },
-                    update: {
-                        path: pathDisplay,
-                        extension: extension
-                    },
-                    create: {
-                        templateId: existingTemplate.id,
-                        type: variantType,
-                        path: pathDisplay,
-                        extension: extension
-                    }
-                });
-
-                // Legacy: Keep variants JSON in sync
-                const existingVariants = Array.isArray(existingTemplate.variants) ? existingTemplate.variants : [];
-                if (!existingVariants.find((v: any) => v.path === pathDisplay)) {
-                    existingVariants.push({
-                        key: nameWithoutExt,
-                        type: variantType,
-                        path: pathDisplay,
-                        extension: extension,
-                        mapping: {}
-                    });
-                    await prisma.template.update({
-                        where: { id: existingTemplate.id },
-                        data: { variants: existingVariants }
-                    });
-                }
-
-                totalCount++;
-                continue;
-            }
-
-            // Check 2: Is it already in Inbox?
+            // Check if it's already in Inbox?
             // @ts-ignore
             const existingInbox = await prisma.fileInbox.findUnique({ where: { path: pathDisplay } });
 
             if (!existingInbox) {
-                // Auto-classify AI vectors as templates
-                const isVector = extension.toLowerCase() === '.ai';
-                const initialPrediction = isVector ? {
-                    category: 'TEMPLATE',
-                    reasoning: 'Automaticky detekovaný zdrojový vektor (.ai)'
-                } : undefined;
-
                 // @ts-ignore
                 await prisma.fileInbox.create({
                     data: {
-                        name: name.replace(/SKU[:_]\s*[a-zA-Z0-9_-]+/i, '').trim(),
+                        name: name,
                         path: pathDisplay,
                         extension: extension,
-                        status: 'UNCLASSIFIED',
-                        ...(initialPrediction ? { prediction: initialPrediction } : {})
+                        status: 'UNCLASSIFIED'
                     }
                 });
                 newInboxItems++;
