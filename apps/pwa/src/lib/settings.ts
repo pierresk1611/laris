@@ -42,12 +42,13 @@ export async function getSettingsByCategory(category: string) {
  * Updates a progress setting.
  * Since this is ephemeral, we don't need encryption.
  */
-export async function updateProgress(key: string, current: number, total: number, label: string) {
+export async function updateProgress(key: string, current: number, total: number, label: string, status: string = 'RUNNING') {
     const value = JSON.stringify({
         percentage: total === 0 ? 0 : Math.round((current / total) * 100),
         current,
         total,
         label,
+        status,
         updatedAt: new Date().toISOString()
     });
 

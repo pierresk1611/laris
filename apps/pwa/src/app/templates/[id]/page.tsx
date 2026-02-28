@@ -262,32 +262,54 @@ export default function TemplateDetailPage() {
         setStatus('loading');
 
         try {
-            const jobRes = await fetch('/api/agent/jobs', {
+            // Find current variant index
+            const variantIndex = variants.findIndex(v => v.type === activeVariantType);
+
+            const res = await fetch('/api/templates/extract-layers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    type: 'LOAD_LAYERS',
-                    payload: { templateId: params.id }
+                    templateId: decodeURIComponent(params.id as string),
+                    variantIndex: variantIndex >= 0 ? variantIndex : 0
                 })
             });
-            const jobData = await jobRes.json();
 
-            // Simulation of agent fulfillment (Peter will implement the real loop)
-            setTimeout(() => {
-                const mockLayers: PsdLayer[] = [
-                    { name: 'NAME_MAIN', type: 'TEXT' },
-                    { name: 'DATE_EVENT', type: 'TEXT' },
-                    { name: 'LOCATION', type: 'TEXT' },
-                    { name: 'BG_IMAGE', type: 'IMAGE' },
-                    { name: 'FOOTER_CONTENT', type: 'TEXT' }
-                ];
-                setLayers(mockLayers);
+            const data = await res.json();
+
+            if (data.success) {
+                // Update local state with extracted layers
+                const newLayers = data.layers.map((l: any) => ({
+                    name: l.name,
+                    type: l.type,
+                    mappedTo: l.mapping || ''
+                }));
+                setLayers(newLayers);
                 setStatus('success');
-                setIsLoadingLayers(false);
-            }, 3000);
-
-        } catch (error) {
+                toast.success(`Načítaných ${data.textLayerCount} textových vrstiev.`);
+            } else if (data.requiresAgent) {
+                // Fallback for .ai files or other agent-only tasks
+                const jobRes = await fetch('/api/agent/jobs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'EXTRACT_LAYERS',
+                        payload: { templateId: decodeURIComponent(params.id as string) }
+                    })
+                });
+                const jobData = await jobRes.json();
+                if (jobData.success) {
+                    toast.info("Tento formát vyžaduje Agenta. Úloha bola odoslaná do fronty.");
+                } else {
+                    throw new Error("Nepodarilo sa vytvoriť úlohu pre Agenta.");
+                }
+                setStatus('idle');
+            } else {
+                throw new Error(data.error || "Chyba pri extrakcii vrstiev.");
+            }
+        } catch (error: any) {
+            toast.error(error.message);
             setStatus('error');
+        } finally {
             setIsLoadingLayers(false);
         }
     };
@@ -412,8 +434,8 @@ export default function TemplateDetailPage() {
                                 <span>{isLoadingLayers ? 'Načítavam z PS...' : 'Načítať vrstvy z PSD'}</span>
                             </button>
 
-                            <p className="text-[10px] text-center font-bold text-slate-400 uppercase tracking-widest px-4 leading-relaxed">
-                                Táto akcia vyžaduje spusteného lokálneho agenta s otvoreným Photoshopom.
+                            <p className="text-[10px] text-center font-bold text-blue-400 uppercase tracking-widest px-4 leading-relaxed">
+                                Vykonáva sa bleskovo v cloude bez nutnosti spusteného Agenta.
                             </p>
                         </div>
                     </div>

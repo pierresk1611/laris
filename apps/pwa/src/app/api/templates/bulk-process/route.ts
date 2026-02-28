@@ -21,48 +21,57 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: true, message: 'No templates need mapping' });
         }
 
-        // Initialize progress
-        await updateProgress('BULK_MAP_PROGRESS', 0, templates.length, 'INICIALIZÁCIA');
+        // Use a base URL for internal API calls
+        const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
 
-        let extractionQueued = 0;
-        let alreadyHasLayers = 0;
+        const hasLayersFilter = (tpl: any) => tpl.mappedPaths > 0 || (Array.isArray(tpl.variants) && tpl.variants.length > 0);
+        const alreadyHasLayers = (templates as any[]).filter(hasLayersFilter).length;
+        let processedCount = alreadyHasLayers;
 
-        for (const tpl of templates as any[]) {
-            // Check if template already has layers (mappedPaths > 0 or has variants with mapping)
-            // If it has layers, it doesn't need Agent extraction, just AI mapping
-            const hasLayers = tpl.mappedPaths > 0 || (Array.isArray(tpl.variants) && tpl.variants.length > 0);
+        // Process in parallel with a limit to avoid overloading
+        const BATCH_SIZE = 5;
+        const toProcess = (templates as any[]).filter(tpl => !hasLayersFilter(tpl));
 
-            if (hasLayers) {
-                alreadyHasLayers++;
-                // We'll handle automatic AI mapping for these in a separate step or via a specific flag
-                // For now, let's keep them in the count but focus on triggering Agent for those without layers
-            } else {
-                await prisma.job.create({
-                    data: {
-                        type: 'EXTRACT_LAYERS',
-                        status: 'PENDING',
-                        payload: {
-                            templateId: tpl.key,
-                            isBulk: true
-                        }
+        for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
+            const batch = toProcess.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(async (tpl) => {
+                try {
+                    // Trigger cloud extraction (which also triggers AI mapping)
+                    const res = await fetch(`${baseUrl}/api/templates/extract-layers`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ templateId: tpl.key })
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        processedCount++;
+                        await updateProgress(
+                            'BULK_MAP_PROGRESS',
+                            processedCount,
+                            templates.length,
+                            `Spracovávam: ${processedCount}/${templates.length}`
+                        );
                     }
-                });
-                extractionQueued++;
-            }
+                } catch (e) {
+                    console.error(`[BulkProcess] Failed for ${tpl.key}:`, e);
+                }
+            }));
         }
 
+        // Final completion update
         await updateProgress(
             'BULK_MAP_PROGRESS',
-            alreadyHasLayers,
             templates.length,
-            `KROK 1: Čakám na Agenta (${alreadyHasLayers}/${templates.length})`
+            templates.length,
+            'DOKONČENÉ',
+            'COMPLETED'
         );
 
         return NextResponse.json({
             success: true,
             total: templates.length,
-            extractionQueued,
-            alreadyHasLayers
+            processed: processedCount
         });
 
     } catch (error: any) {
