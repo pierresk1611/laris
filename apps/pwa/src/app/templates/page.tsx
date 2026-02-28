@@ -48,10 +48,11 @@ const ThumbnailViewer = ({ path, extension }: { path: string, extension: string 
     const [imgSrc, setImgSrc] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
-    const isImage = extension.toLowerCase() === '.png' || extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg';
+    const ext = extension.toLowerCase();
+    const isThumbnailSupported = ['.png', '.jpg', '.jpeg', '.ai', '.psd', '.psdt'].includes(ext);
 
     useEffect(() => {
-        if (!isImage) return;
+        if (!isThumbnailSupported) return;
 
         const fetchThumb = async () => {
             setLoading(true);
@@ -73,32 +74,47 @@ const ThumbnailViewer = ({ path, extension }: { path: string, extension: string 
         };
 
         fetchThumb();
-    }, [path, isImage]);
+    }, [path, isThumbnailSupported]);
 
-    if (!isImage) {
+    const getFallbackIcon = () => {
+        switch (ext) {
+            case '.ai': return <div className="w-full h-full bg-[#330000] text-[#ff7c00] font-black text-[11px] flex items-center justify-center">Ai</div>;
+            case '.psd':
+            case '.psdt': return <div className="w-full h-full bg-[#001d26] text-[#31a8ff] font-black text-[11px] flex items-center justify-center">Ps</div>;
+            case '.pdf': return <div className="w-full h-full bg-red-100 text-red-600 font-bold text-[10px] flex items-center justify-center tracking-tighter">PDF</div>;
+            case '.png':
+            case '.jpg':
+            case '.jpeg': return <div className="w-full h-full bg-slate-100 text-slate-400 flex items-center justify-center"><ImageIcon size={18} /></div>;
+            default: return <div className="w-full h-full bg-slate-100 text-slate-400 flex items-center justify-center"><FileText size={18} /></div>;
+        }
+    };
+
+    if (!isThumbnailSupported) {
         return (
-            <div className="w-10 h-10 bg-slate-100 rounded-lg text-slate-500 flex items-center justify-center shrink-0">
-                <FileText size={18} />
+            <div className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border border-slate-100 shadow-sm">
+                {getFallbackIcon()}
             </div>
         );
     }
 
     if (loading) {
         return (
-            <div className="w-10 h-10 bg-slate-100 rounded-lg text-slate-400 flex items-center justify-center shrink-0 animate-pulse">
-                <ImageIcon size={16} />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 animate-pulse border border-slate-200">
+                <div className="w-full h-full opacity-50 flex items-center justify-center">
+                    {getFallbackIcon()}
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden shrink-0 border border-slate-200">
+        <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden shrink-0 border border-slate-200 shadow-sm">
             {imgSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={imgSrc} alt="thumbnail" className="w-full h-full object-cover" />
             ) : (
-                <div className="w-full h-full text-slate-500 flex items-center justify-center">
-                    <ImageIcon size={18} />
+                <div className="w-full h-full flex items-center justify-center">
+                    {getFallbackIcon()}
                 </div>
             )}
         </div>

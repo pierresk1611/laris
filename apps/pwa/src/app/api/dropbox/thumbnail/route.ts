@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSetting } from '@/lib/settings';
 import { Dropbox } from 'dropbox';
+import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,16 @@ export async function POST(req: Request) {
 
         if (!path) {
             return NextResponse.json({ success: false, error: 'Path is required' }, { status: 400 });
+        }
+
+        // Check cache in DB first
+        const existingFile = await prisma.fileInbox.findUnique({
+            where: { path },
+            select: { thumbnailData: true }
+        });
+
+        if (existingFile && existingFile.thumbnailData) {
+            return NextResponse.json({ success: true, url: existingFile.thumbnailData });
         }
 
         // Fetch credentials
@@ -57,6 +68,16 @@ export async function POST(req: Request) {
             const buffer = await response.result.fileBlob.arrayBuffer();
             const base64 = Buffer.from(buffer).toString('base64');
             const dataUri = `data:image/png;base64,${base64}`;
+
+            // Save to DB cache to avoid future API calls
+            try {
+                await prisma.fileInbox.update({
+                    where: { path },
+                    data: { thumbnailData: dataUri }
+                });
+            } catch (cacheError) {
+                console.warn("[DropboxThumbnail] Failed to save DB cache for path:", path);
+            }
 
             return NextResponse.json({ success: true, url: dataUri });
         } else {
