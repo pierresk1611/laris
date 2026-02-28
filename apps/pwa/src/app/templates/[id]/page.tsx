@@ -26,6 +26,14 @@ interface PsdLayer {
     mappedTo?: string;
 }
 
+interface VariantInfo {
+    type: string;
+    path?: string;
+    extension?: string;
+    mapping?: Record<string, string>;
+    imageUrl?: string;
+}
+
 const AVAILABLE_META_FIELDS = [
     'NAME_MAIN',
     'DATE_MAIN',
@@ -41,7 +49,23 @@ export default function TemplateDetailPage() {
     const params = useParams();
     const router = useRouter();
     const [isLoadingLayers, setIsLoadingLayers] = useState(false);
-    const [layers, setLayers] = useState<PsdLayer[]>([]);
+
+    const [variants, setVariants] = useState<VariantInfo[]>([]);
+    const [activeVariantType, setActiveVariantType] = useState<string>('MAIN');
+    const [layersByVariant, setLayersByVariant] = useState<Record<string, PsdLayer[]>>({});
+
+    // Derived contextual state
+    const layers = layersByVariant[activeVariantType] || [];
+
+    // Wrapper to keep existing code functional per-tab
+    const setLayers = (val: PsdLayer[] | ((prev: PsdLayer[]) => PsdLayer[])) => {
+        setLayersByVariant(prev => {
+            const currentLayers = prev[activeVariantType] || [];
+            const newLayers = typeof val === 'function' ? val(currentLayers) : val;
+            return { ...prev, [activeVariantType]: newLayers };
+        });
+    };
+
     const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [alias, setAlias] = useState<string>('');
     const [isEditingAlias, setIsEditingAlias] = useState(false);
@@ -56,11 +80,32 @@ export default function TemplateDetailPage() {
                 const data = await res.json();
                 if (data.success) {
                     if (data.alias) setAlias(data.alias);
-                    if (data.mapping) {
-                        setLayers(prev => prev.map(l => ({
-                            ...l,
-                            mappedTo: data.mapping[l.name] || l.mappedTo
-                        })));
+
+                    let loadedVariants = data.variants || [];
+                    if (loadedVariants.length === 0 && data.mapping) {
+                        loadedVariants = [{ type: 'MAIN', mapping: data.mapping }];
+                    }
+
+                    setVariants(loadedVariants);
+
+                    if (loadedVariants.length > 0) {
+                        setActiveVariantType(loadedVariants[0].type);
+
+                        const initialLayers: Record<string, PsdLayer[]> = {};
+                        loadedVariants.forEach((v: any) => {
+                            if (v.mapping && Object.keys(v.mapping).length > 0) {
+                                initialLayers[v.type] = Object.keys(v.mapping).map(k => ({
+                                    name: k,
+                                    type: 'TEXT',
+                                    mappedTo: v.mapping[k]
+                                }));
+                            }
+                        });
+                        setLayersByVariant(initialLayers);
+                        // If we populated layers from DB, treat as success
+                        if (Object.keys(initialLayers).length > 0) {
+                            setStatus('success');
+                        }
                     }
                 }
             } catch (e) {
@@ -100,6 +145,7 @@ export default function TemplateDetailPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 templateId: decodeURIComponent(params.id as string),
+                variantType: activeVariantType,
                 layers: layers
             })
         }).then(async res => {
@@ -138,6 +184,7 @@ export default function TemplateDetailPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 key: keyId,
+                variantType: activeVariantType,
                 mappingData
             })
         }).then(async res => {
@@ -211,7 +258,7 @@ export default function TemplateDetailPage() {
 
     return (
         <div className="pb-12">
-            <div className="flex items-center gap-4 mb-8">
+            <div className="flex items-center gap-4 mb-4">
                 <button
                     onClick={() => router.back()}
                     className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-500"
@@ -220,6 +267,23 @@ export default function TemplateDetailPage() {
                 </button>
                 <AppHeader title={`Detail šablóny: ${params.id}`} />
             </div>
+
+            {/* VARIANT TAB SWITCHER */}
+            {variants.length > 0 && (
+                <div className="flex items-center gap-2 mb-8 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm w-fit">
+                    {variants.map(v => (
+                        <button
+                            key={v.type}
+                            onClick={() => {
+                                setActiveVariantType(v.type);
+                            }}
+                            className={`px-6 py-2.5 rounded-xl text-sm font-black tracking-widest uppercase transition-all ${activeVariantType === v.type ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                        >
+                            {v.type === 'MAIN' ? '📄 Hlavné Oznámenie' : v.type === 'INVITE' ? '✉️ Pozvánka k stolu' : v.type}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left: Info & Actions */}

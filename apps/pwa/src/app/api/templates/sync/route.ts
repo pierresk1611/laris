@@ -126,20 +126,55 @@ export async function POST(req: Request) {
             // Regex Match pre nový formát: ^ad_(.*?)_([OP])_(.*)$
             const v2Match = nameWithoutExt.match(/^ad_(.*?)_([OP])_(.*)$/i);
 
-            // Fallback Match pre staršie formáty: napr. 2022_18_P alebo 2023_31_O
+            // Fallback Match pre staršie formáty (s podtržníkom): napr. 2022_18_P alebo 2023_31_O
             const oldMatch = nameWithoutExt.match(/^(.*?)_([OP])$/i);
+
+            // Aggressive Match pre staré formáty bez podtržníka: napr. NO34P, NO34O
+            // This regex says: starts with characters, and ends with exactly O or P (case insensitive)
+            const aggressiveMatch = nameWithoutExt.match(/^([A-Z0-9_-]+?)([OP])$/i);
+
+            let variantType = 'MAIN';
 
             if (v2Match) {
                 // Kľúčom pre šablónu je teraz stredný kód (SKU)
                 potentialKey = v2Match[1].toUpperCase();
+                variantType = v2Match[2].toUpperCase();
             } else if (oldMatch) {
                 // Odtrhneme koncovku _O alebo _P
                 potentialKey = oldMatch[1].replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
+                variantType = oldMatch[2].toUpperCase();
+            } else if (aggressiveMatch && !nameWithoutExt.includes('_')) {
+                // Pre zachytenie NO34P -> [1] NO34, [2] P
+                potentialKey = aggressiveMatch[1].toUpperCase();
+                variantType = aggressiveMatch[2].toUpperCase();
             }
+
+            variantType = variantType === 'P' ? 'INVITE' : 'MAIN';
 
             // Check 1: Is it already an active template?
             const existingTemplate = await prisma.template.findUnique({ where: { key: potentialKey } });
+
+            // Logic to append variant correctly to an existing template instead of skipping
             if (existingTemplate) {
+                // Skontrolujeme, ci dany subor uz nefiguruje vo variants
+                const existingVariants = Array.isArray(existingTemplate.variants) ? existingTemplate.variants : [];
+                // @ts-ignore
+                if (!existingVariants.find(v => v.path === pathDisplay)) {
+                    // @ts-ignore
+                    existingVariants.push({
+                        key: nameWithoutExt,
+                        type: variantType,
+                        path: pathDisplay,
+                        extension: extension,
+                        mapping: {}
+                    });
+
+                    await prisma.template.update({
+                        where: { key: potentialKey },
+                        data: { variants: existingVariants }
+                    });
+                }
+
                 totalCount++;
                 continue;
             }

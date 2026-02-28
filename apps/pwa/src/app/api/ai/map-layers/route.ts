@@ -19,7 +19,7 @@ const AVAILABLE_META_FIELDS = [
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { templateId, layers } = body;
+        const { templateId, variantType, layers } = body;
 
         if (!templateId || !Array.isArray(layers)) {
             return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
@@ -75,20 +75,39 @@ PRAVIDLÁ:
 
         const hasMappings = Object.keys(finalMapping).length > 0;
 
-        // Count total text layers vs mapped to determine status
+        // Fetch template to update existing variants
+        const currentTemplate = await prisma.template.findUnique({ where: { key: templateId } });
+        // @ts-ignore
+        const existingVariants: any[] = Array.isArray(currentTemplate?.variants) ? currentTemplate.variants : [];
+
+        // Target specific variant
+        let targetVariantIndex = existingVariants.findIndex(v => v.type === (variantType || 'MAIN'));
+        if (targetVariantIndex === -1 && variantType) {
+            existingVariants.push({ type: variantType, mapping: finalMapping });
+            targetVariantIndex = existingVariants.length - 1;
+        } else if (targetVariantIndex !== -1) {
+            existingVariants[targetVariantIndex].mapping = finalMapping;
+        }
+
+        // Count total text layers vs mapped to determine status for THIS variant
         const totalTextLayers = layers.filter(l => l.type === 'TEXT').length;
         const mappedTextLayers = Object.keys(finalMapping).length;
 
-        let newStatus = 'ERROR';
-        if (hasMappings) {
-            newStatus = (mappedTextLayers >= totalTextLayers && totalTextLayers > 0) ? 'ACTIVE' : 'NEEDS_REVIEW';
+        let allUnmapped = true;
+
+        // Aggregate status check
+        if (hasMappings || existingVariants.some(v => Object.keys(v.mapping || {}).length > 0)) {
+            allUnmapped = false;
         }
+
+        const newStatus = allUnmapped ? 'ERROR' : 'ACTIVE';
 
         const template = await prisma.template.update({
             where: { key: templateId },
             data: {
-                mappingData: finalMapping,
-                mappedPaths: Object.keys(finalMapping).length,
+                // @ts-ignore
+                variants: existingVariants,
+                mappedPaths: mappedTextLayers,
                 status: newStatus
             }
         });
