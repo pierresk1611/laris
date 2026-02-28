@@ -47,19 +47,45 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 });
         }
 
-        const variants = ((template as any).variants as any[]) || [];
-        const variant = variants[variantIndex];
+        // Try to get files from TemplateFile relation first
+        const templateWithFiles = await prisma.template.findUnique({
+            where: { id: template.id },
+            include: { files: true }
+        }) as any;
+
+        let variant = null;
+        const relationalFiles = templateWithFiles?.files || [];
+        const legacyVariants = (template.variants as any[]) || [];
+
+        if (relationalFiles.length > 0) {
+            // Find by type (MAIN = 0, INVITE = 1)
+            const typeToFind = variantIndex === 0 ? 'MAIN' : 'INVITE';
+            variant = relationalFiles.find((f: any) => f.type === typeToFind);
+            if (!variant && variantIndex < relationalFiles.length) {
+                variant = relationalFiles[variantIndex];
+            }
+        }
+
+        // Fallback to legacy variants if missing
+        if (!variant && legacyVariants.length > 0) {
+            variant = legacyVariants[variantIndex];
+        }
 
         if (!variant || !variant.path) {
-            console.error(`[CloudExtract] Critical Failure for ${templateId}: Variant at index ${variantIndex} is missing or has no path.`, {
-                requestedIndex: variantIndex,
-                availableVariants: variants.length,
-                variantDetails: variant ? JSON.stringify(variant) : 'NULL'
+            const variantCode = variantIndex === 0 ? 'O' : 'P';
+            const errorMsg = `Súbor pre variant ${variantCode} nemá definovanú cestu na Dropboxe.`;
+
+            console.error(`[CloudExtract] CRITICAL: Database record for ${templateId} ${variantCode} is missing path.`, {
+                templateId,
+                variantIndex,
+                hasRelational: relationalFiles.length > 0,
+                hasLegacy: legacyVariants.length > 0
             });
+
             return NextResponse.json({
                 success: false,
-                error: `Súbor pre variant ${variantIndex === 0 ? 'O' : 'P'} nemá definovanú cestu na Dropboxe. Skontaktujte administrátora.`,
-                details: `Missing path for template ${templateId}`
+                error: errorMsg,
+                details: `Missing path for template ${templateId} variant ${variantCode}`
             }, { status: 404 });
         }
 

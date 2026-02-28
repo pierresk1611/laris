@@ -78,6 +78,10 @@ export default function TemplateDetailPage() {
     const [isEditingSku, setIsEditingSku] = useState(false);
     const [isSavingSku, setIsSavingSku] = useState(false);
 
+    const [editingPath, setEditingPath] = useState<string>('');
+    const [isEditingPath, setIsEditingPath] = useState(false);
+    const [isSavingPath, setIsSavingPath] = useState(false);
+
     // Load existing mapping from DB
     useEffect(() => {
         const loadMapping = async () => {
@@ -133,6 +137,43 @@ export default function TemplateDetailPage() {
         };
         loadMapping();
     }, [params.id]);
+
+    // Update editingPath when active variant changes
+    useEffect(() => {
+        const currentVariant = variants.find(v => v.type === activeVariantType);
+        setEditingPath(currentVariant?.path || '');
+    }, [activeVariantType, variants]);
+
+    const handleSavePath = async () => {
+        setIsSavingPath(true);
+        try {
+            const res = await fetch('/api/templates/variant-path', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    templateId: decodeURIComponent(params.id as string),
+                    type: activeVariantType,
+                    path: editingPath
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Cesta k súboru bola aktualizovaná");
+                // Update local variants state
+                setVariants(prev => prev.map(v =>
+                    v.type === activeVariantType ? { ...v, path: editingPath } : v
+                ));
+                setIsEditingPath(false);
+                router.refresh();
+            } else {
+                toast.error(data.error || "Chyba pri ukladaní cesty");
+            }
+        } catch (e) {
+            toast.error("Nepodarilo sa uložiť cestu");
+        } finally {
+            setIsSavingPath(false);
+        }
+    };
 
     const handleSaveAlias = async () => {
         setIsSavingAlias(true);
@@ -431,6 +472,50 @@ export default function TemplateDetailPage() {
                                             }`}
                                     >
                                         {sku ? `SKU: ${sku}` : '+ PRIDAŤ SKU E-SHOPU'}
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-50 w-full px-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">Dropbox Cesta ({activeVariantType})</p>
+                                {isEditingPath ? (
+                                    <div className="flex flex-col gap-2">
+                                        <input
+                                            autoFocus
+                                            value={editingPath}
+                                            onChange={e => setEditingPath(e.target.value)}
+                                            className="text-[10px] font-mono p-2 bg-slate-50 border border-blue-200 rounded-lg outline-none w-full"
+                                            placeholder="/Templates/..."
+                                            disabled={isSavingPath}
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={handleSavePath}
+                                                disabled={isSavingPath}
+                                                className="flex-1 py-1.5 bg-green-600 text-white text-[10px] font-bold rounded-lg hover:bg-green-700"
+                                            >
+                                                ULOŽIŤ CESTU
+                                            </button>
+                                            <button
+                                                onClick={() => setIsEditingPath(false)}
+                                                disabled={isSavingPath}
+                                                className="px-3 py-1.5 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-lg hover:bg-slate-200"
+                                            >
+                                                ZRUŠIŤ
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => setIsEditingPath(true)}
+                                        className="w-full text-left group"
+                                    >
+                                        <p className="text-[9px] font-mono text-slate-500 break-all bg-slate-50 p-2 rounded-lg border border-transparent group-hover:border-blue-100 group-hover:bg-blue-50 transition-all">
+                                            {editingPath || '⚠️ ŽIADNA CESTA DEFINOVANÁ'}
+                                        </p>
+                                        <p className="text-[8px] font-bold text-blue-500 mt-1 uppercase text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                            Kliknite pre manuálnu úpravu cesty
+                                        </p>
                                     </button>
                                 )}
                             </div>

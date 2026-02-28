@@ -96,8 +96,19 @@ export async function POST(req: Request) {
                 });
 
                 // Legacy: Keep variants JSON in sync for now to avoid breaking existing code immediately
-                const existingVariants = Array.isArray(existingTemplate.variants) ? existingTemplate.variants : [];
-                if (!existingVariants.find((v: any) => v.path === pathDisplay)) {
+                const existingVariants = Array.isArray(existingTemplate.variants) ? [...(existingTemplate.variants as any[])] : [];
+                const vIndex = existingVariants.findIndex((v: any) => v.type === variantType);
+
+                if (vIndex !== -1) {
+                    // Update existing
+                    existingVariants[vIndex] = {
+                        ...existingVariants[vIndex],
+                        key: nameWithoutExt,
+                        path: pathDisplay,
+                        extension: extension
+                    };
+                } else {
+                    // Push new
                     existingVariants.push({
                         key: nameWithoutExt,
                         type: variantType,
@@ -105,11 +116,12 @@ export async function POST(req: Request) {
                         extension: extension,
                         mapping: {}
                     });
-                    await prisma.template.update({
-                        where: { id: existingTemplate.id },
-                        data: { variants: existingVariants as any }
-                    });
                 }
+
+                await prisma.template.update({
+                    where: { id: existingTemplate.id },
+                    data: { variants: existingVariants as any }
+                });
             } else {
                 // Create new Template and its first File
                 const newTemplate = await prisma.template.create({
