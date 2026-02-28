@@ -26,17 +26,21 @@ export async function POST(request: Request) {
 
         if (!key) return NextResponse.json({ success: false, error: 'Key required' }, { status: 400 });
 
+        const hasMappings = Object.keys(mappingData || {}).length > 0;
+
         const template = await prisma.template.upsert({
             where: { key },
             update: {
                 mappingData,
-                mappedPaths: Object.keys(mappingData || {}).length
+                mappedPaths: Object.keys(mappingData || {}).length,
+                status: hasMappings ? 'ACTIVE' : 'ERROR'
             },
             create: {
                 key,
                 name: key, // default name
                 mappingData,
-                mappedPaths: Object.keys(mappingData || {}).length
+                mappedPaths: Object.keys(mappingData || {}).length,
+                status: hasMappings ? 'ACTIVE' : 'ERROR'
             }
         });
 

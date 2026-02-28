@@ -143,13 +143,21 @@ export async function POST(req: Request) {
             const existingInbox = await prisma.fileInbox.findUnique({ where: { path: pathDisplay } });
 
             if (!existingInbox) {
+                // Auto-classify AI vectors as templates
+                const isVector = extension.toLowerCase() === '.ai';
+                const initialPrediction = isVector ? {
+                    category: 'TEMPLATE',
+                    reasoning: 'Automaticky detekovaný zdrojový vektor (.ai)'
+                } : undefined;
+
                 // @ts-ignore
                 await prisma.fileInbox.create({
                     data: {
                         name: name,
                         path: pathDisplay,
                         extension: extension,
-                        status: 'UNCLASSIFIED'
+                        status: 'UNCLASSIFIED',
+                        ...(initialPrediction ? { prediction: initialPrediction } : {})
                     }
                 });
                 newInboxItems++;

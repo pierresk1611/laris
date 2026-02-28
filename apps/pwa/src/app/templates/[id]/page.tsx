@@ -14,6 +14,7 @@ import {
     CheckCircle2,
     AlertCircle
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface PsdLayer {
     name: string;
@@ -56,22 +57,37 @@ export default function TemplateDetailPage() {
             if (l.mappedTo) mappingData[l.name] = l.mappedTo;
         });
 
-        try {
-            const res = await fetch('/api/templates/mapping', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    key: params.id,
-                    mappingData
-                })
-            });
-            const data = await res.json();
-            if (data.success) {
-                alert("Mapovanie úspešne uložené!");
-            }
-        } catch (e) {
-            alert("Chyba pri ukladaní.");
-        }
+        const savePromise = fetch('/api/templates/mapping', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                key: params.id,
+                mappingData
+            })
+        }).then(res => res.json());
+
+        toast.promise(savePromise, {
+            loading: 'Ukladám mapovanie...',
+            success: (data) => {
+                if (data.success) {
+                    // Trigger preview generation silently in background
+                    fetch('/api/agent/jobs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            type: 'GENERATE_PREVIEW',
+                            payload: { templateId: params.id }
+                        })
+                    }).catch(console.error);
+
+                    router.refresh();
+                    router.push('/templates');
+                    return "Mapovanie úspešne uložené!";
+                }
+                throw new Error("Chyba API");
+            },
+            error: 'Chyba pri ukladaní mapovania.'
+        });
     };
 
     const handleLoadLayers = async () => {

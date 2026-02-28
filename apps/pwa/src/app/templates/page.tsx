@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from "react";
 import AppHeader from "@/components/AppHeader";
 import Link from "next/link";
 import {
@@ -18,7 +18,9 @@ import {
     FileText,
     Trash2,
     Wand2,
-    ArrowRight
+    ArrowRight,
+    ChevronDown,
+    ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -40,6 +42,67 @@ interface InboxItem {
     status: string;
     prediction: { category: string, reasoning: string } | null;
     createdAt: string;
+}
+
+const ThumbnailViewer = ({ path, extension }: { path: string, extension: string }) => {
+    const [imgSrc, setImgSrc] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    const isImage = extension.toLowerCase() === '.png' || extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg';
+
+    useEffect(() => {
+        if (!isImage) return;
+
+        const fetchThumb = async () => {
+            setLoading(true);
+            try {
+                const res = await fetch('/api/dropbox/thumbnail', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path })
+                });
+                const data = await res.json();
+                if (data.success && data.url) {
+                    setImgSrc(data.url);
+                }
+            } catch (e) {
+                console.error("Failed to load thumbnail", e);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchThumb();
+    }, [path, isImage]);
+
+    if (!isImage) {
+        return (
+            <div className="w-10 h-10 bg-slate-100 rounded-lg text-slate-500 flex items-center justify-center shrink-0">
+                <FileText size={18} />
+            </div>
+        );
+    }
+
+    if (loading) {
+        return (
+            <div className="w-10 h-10 bg-slate-100 rounded-lg text-slate-400 flex items-center justify-center shrink-0 animate-pulse">
+                <ImageIcon size={16} />
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden shrink-0 border border-slate-200">
+            {imgSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imgSrc} alt="thumbnail" className="w-full h-full object-cover" />
+            ) : (
+                <div className="w-full h-full text-slate-500 flex items-center justify-center">
+                    <ImageIcon size={18} />
+                </div>
+            )}
+        </div>
+    );
 }
 
 export default function TemplatesPage() {
@@ -229,6 +292,31 @@ export default function TemplatesPage() {
             toast.error("Nepodarilo sa uložiť akciu.");
             fetchData(); // Revert
         }
+    };
+
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+    const groupedInbox = useMemo(() => {
+        const groups: Record<string, InboxItem[]> = {};
+        inboxItems.forEach(item => {
+            const name = item.name;
+            const withoutExt = name.substring(0, name.lastIndexOf('.')) || name;
+
+            // Extract base name for v2 convention (ad_123_O_Name)
+            let groupKey = withoutExt;
+            const parts = withoutExt.split('_');
+            if (parts[0] === 'ad' && parts.length >= 4) {
+                groupKey = `ad_${parts[1]}_${parts[2]}_${parts[3]}`;
+            }
+
+            if (!groups[groupKey]) groups[groupKey] = [];
+            groups[groupKey].push(item);
+        });
+        return groups;
+    }, [inboxItems]);
+
+    const toggleGroup = (key: string) => {
+        setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
     return (
@@ -443,71 +531,105 @@ export default function TemplatesPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
-                                    {inboxItems.map((item) => {
-                                        // Determine suggested action style based on prediction
-                                        const isAiTemplate = item.prediction?.category === 'TEMPLATE';
-                                        const isAiDoc = item.prediction?.category === 'DOCUMENT';
-                                        const isAiIgnore = item.prediction?.category === 'IGNORE';
+                                    {Object.entries(groupedInbox).map(([groupKey, items]) => {
+                                        const isExpanded = expandedGroups[groupKey];
+                                        const hasMultiple = items.length > 1;
 
                                         return (
-                                            <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-slate-100 rounded-lg text-slate-500">
-                                                            <FileText size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-bold text-slate-900 text-sm">{item.name}</div>
-                                                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1 max-w-[250px] truncate" title={item.path}>
-                                                                <FolderOpen size={10} className="shrink-0" />
-                                                                <span className="truncate">{item.path.replace(`/${item.name}`, '') || '/'}</span>
+                                            <Fragment key={groupKey}>
+                                                {/* Parent Group Row */}
+                                                {hasMultiple && (
+                                                    <tr className="bg-slate-50/50 border-b border-slate-100/50 hover:bg-slate-50 cursor-pointer" onClick={() => toggleGroup(groupKey)}>
+                                                        <td colSpan={3} className="px-6 py-3">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="p-1.5 text-slate-400 bg-white shadow-sm rounded-md">
+                                                                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                                                    </div>
+                                                                    <span className="font-bold text-slate-700 text-sm">Spojené dokumenty a návrhy: {groupKey}</span>
+                                                                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 font-bold rounded-full text-[10px] ml-2">
+                                                                        {items.length} súborov
+                                                                    </span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); toast.info("Generovanie Multi-šablóny pridané čoskoro..."); }}
+                                                                    className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-sm"
+                                                                >
+                                                                    Zlúčiť ako šablónu
+                                                                </button>
                                                             </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    {item.prediction ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${isAiTemplate ? 'bg-green-100 text-green-700' :
-                                                                isAiDoc ? 'bg-blue-100 text-blue-700' :
-                                                                    'bg-slate-100 text-slate-600'
-                                                                }`}>
-                                                                {item.prediction.category}
-                                                            </span>
-                                                            <span className="text-[10px] text-slate-400 italic">
-                                                                {item.prediction.reasoning}
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-slate-300 text-xs italic">Čaká na analýzu...</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                                                        <button
-                                                            onClick={() => handleClassify(item.id, 'TEMPLATE')}
-                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isAiTemplate ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-105' : 'bg-white text-slate-600 border-slate-200 hover:border-green-300 hover:text-green-600'}`}
-                                                        >
-                                                            <Layers size={14} />
-                                                            Šablóna
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleClassify(item.id, 'DOCUMENT')}
-                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isAiDoc ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}
-                                                        >
-                                                            <FileText size={14} />
-                                                            Dokument
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleClassify(item.id, 'IGNORE')}
-                                                            className={`p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all ${isAiIgnore ? 'text-red-500 bg-red-50' : ''}`}
-                                                            title="Ignorovať"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
+                                                        </td>
+                                                    </tr>
+                                                )}
+
+                                                {/* Children Rows */}
+                                                {(hasMultiple ? isExpanded : true) && items.map((item) => {
+                                                    const isAiTemplate = item.prediction?.category === 'TEMPLATE';
+                                                    const isAiDoc = item.prediction?.category === 'DOCUMENT';
+                                                    const isAiIgnore = item.prediction?.category === 'IGNORE';
+
+                                                    return (
+                                                        <tr key={item.id} className={`hover:bg-blue-50/30 transition-colors group ${hasMultiple ? 'bg-white' : ''}`}>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    {/* Use Thumbnail Viewer instead of icon */}
+                                                                    <ThumbnailViewer path={item.path} extension={item.extension} />
+
+                                                                    <div>
+                                                                        <div className="font-bold text-slate-900 text-sm">{item.name}</div>
+                                                                        <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1 max-w-[250px] truncate" title={item.path}>
+                                                                            <FolderOpen size={10} className="shrink-0" />
+                                                                            <span className="truncate">{item.path.replace(`/${item.name}`, '') || '/'}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {item.prediction ? (
+                                                                    <div className="flex flex-col gap-1">
+                                                                        <span className={`self-start px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${isAiTemplate ? 'bg-green-100 text-green-700' :
+                                                                            isAiDoc ? 'bg-blue-100 text-blue-700' :
+                                                                                'bg-slate-100 text-slate-600'
+                                                                            }`}>
+                                                                            {item.prediction.category}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-slate-400 italic">
+                                                                            {item.prediction.reasoning}
+                                                                        </span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-slate-300 text-xs italic">Čaká na analýzu...</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                                                                    <button
+                                                                        onClick={() => handleClassify(item.id, 'TEMPLATE')}
+                                                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isAiTemplate ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-105' : 'bg-white text-slate-600 border-slate-200 hover:border-green-300 hover:text-green-600'}`}
+                                                                    >
+                                                                        <Layers size={14} />
+                                                                        Šablóna
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleClassify(item.id, 'DOCUMENT')}
+                                                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isAiDoc ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}
+                                                                    >
+                                                                        <FileText size={14} />
+                                                                        Dokument
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleClassify(item.id, 'IGNORE')}
+                                                                        className={`p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all ${isAiIgnore ? 'text-red-500 bg-red-50' : ''}`}
+                                                                        title="Ignorovať"
+                                                                    >
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </Fragment>
                                         );
                                     })}
                                 </tbody>

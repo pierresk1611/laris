@@ -1,29 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSetting } from '@/lib/settings';
-
-// Function to call Groq (simulated for now if package not present, or using fetch)
-async function callGroq(apiKey: string, prompt: string) {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            messages: [{ role: 'user', content: prompt }],
-            model: "llama3-70b-8192", // Fast and good reasoning
-            temperature: 0,
-            response_format: { type: "json_object" }
-        })
-    });
-
-    if (!response.ok) {
-        throw new Error(`Groq API Error: ${response.statusText}`);
-    }
-
-    return response.json();
-}
+import Groq from "groq-sdk";
 
 export async function POST(req: Request) {
     try {
@@ -39,6 +17,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, error: 'GROQ_API_KEY missing' });
         }
 
+        const groq = new Groq({ apiKey });
+
         // @ts-ignore
         const examples = await prisma.aiClassificationExample.findMany({
             take: 50,
@@ -51,26 +31,32 @@ export async function POST(req: Request) {
         const filesToAnalyze = items.map((i: any) => `"${i.name}"`).join('\n');
 
         const prompt = `
-        You are an intelligent file classifier. 
-        Your task is to categorize files into one of these categories: TEMPLATE, DOCUMENT, IGNORE.
+        Si inteligentný klasifikátor grafických súborov pre tlačiareň. Tvojou úlohou je roztriediť zoznam súborov do 3 kategórií: TEMPLATE, DOCUMENT, IGNORE.
+        Odovzdáš VÝHRADNE čistý JSON objekt (bez markdown blokov \`\`\`), kde klúčom je presný názov súboru a hodnotou objekt { "category": "KATEGORIA", "reasoning": "Krátke zdôvodnenie v slovenčine" }.
         
-        Rules:
-        - TEMPLATE: Design files (.psd, .ai) that look like product templates (e.g. contains codes like JSO, KSO, PNO, Year).
-        - DOCUMENT: PDF or Excel files, invoices, delivery notes (dodaci list, faktura).
-        - IGNORE: System files, generic images not related to products.
+        Pravidlá klasifikácie:
+        1. TEMPLATE: Dizajnové súbory (hlavne .psd, .ai, .png, .jpg), ktoré slúžia ako šablóny produktov.
+           - POZOR: Všeobecne známe kódové označenia obsahujú čísla/roky (napr. JSO 15, ad_2026_O_nazov, atď.).
+           - PREFIX ZLUČOVANIE (Veľmi dôležité): Ak v zozname vidíš súbor s podobným názvom ale končiaci na "_metal", "_mask", "_gold" atď. (napríklad "8.ai" a "8_metal.pdf"), MUSÍŠ ten metalický pod-súbor tiež označiť ako TEMPLATE a do reasoning uviesť: "Súčasť šablóny (maska)". Patria totiž k sebe!
+        2. DOCUMENT: Kancelárske súbory, PDF faktúry, dodacie listy, excel tabuľky, manuály k tlači.
+        3. IGNORE: Systémové súbory (napr. .DS_Store), náhľadové mockup fotky nepatriace k produktu, úplný odpad.
 
-        Here are some examples of past classifications:
+        Príklady z minulosti:
         ${exampleText}
 
-        Now classify these new files. Return a JSON object where keys are filenames and values are objects with "category" and "reasoning".
-        Files to classify:
+        Súbory na klasifikáciu:
         ${filesToAnalyze}
         `;
 
         // 3. Call AI
-        // We do it in one batch to save tokens/time
-        const aiResponse = await callGroq(apiKey, prompt);
-        const content = aiResponse.choices[0].message.content;
+        const aiResponse = await groq.chat.completions.create({
+            messages: [{ role: 'user', content: prompt }],
+            model: "llama3-70b-8192", // Fast and good reasoning
+            temperature: 0.1,
+            response_format: { type: "json_object" }
+        });
+
+        const content = aiResponse.choices[0]?.message?.content || "{}";
         const predictions = JSON.parse(content);
 
         // 4. Save predictions to DB (update FileInbox items)
@@ -93,8 +79,11 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ success: true, predictions });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("[InboxAnalyze] Error:", error);
-        return NextResponse.json({ success: false, error: 'AI Analysis failed' }, { status: 500 });
+        return NextResponse.json({
+            success: false,
+            error: error.message || 'AI Analysis failed'
+        }, { status: 500 });
     }
 }
