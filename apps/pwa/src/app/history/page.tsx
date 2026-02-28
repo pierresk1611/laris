@@ -86,80 +86,103 @@ export default function HistoryPage() {
                                 <tr className="bg-slate-50/30">
                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Náhľad</th>
                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID / Zdroj</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dátum prijatia</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:table-cell">Čas</th>
                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Zákazník</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Položka</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden md:table-cell">Položka</th>
                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Akcia</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {orders.map((order) => (
-                                    <tr key={order.id} className="hover:bg-slate-50/50 transition-colors group">
-                                        {/* Thumbnail */}
-                                        <td className="px-6 py-4 w-20">
-                                            <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center relative group-hover:shadow-md transition-all">
-                                                {order.preview ? (
-                                                    <img src={order.preview} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-8 h-8 rounded-full border-2 border-slate-200 border-dashed animate-spin-slow opacity-20" />
-                                                )}
-                                            </div>
-                                        </td>
+                                {[...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((order) => {
+                                    const orderDate = new Date(order.date);
+                                    // Make sure we have a valid date
+                                    const dateFormatted = !isNaN(orderDate.getTime())
+                                        ? orderDate.toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                        : 'Neznámy';
+                                    const timeFormatted = !isNaN(orderDate.getTime())
+                                        ? orderDate.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })
+                                        : '--:--';
 
-                                        {/* ID / Source */}
-                                        <td className="px-6 py-4">
-                                            <div>
-                                                <span className="text-lg font-black text-slate-900 block">#{order.number}</span>
-                                                <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest truncate max-w-[120px] block">
-                                                    {order.shopName || 'E-shop'}
-                                                </span>
-                                            </div>
-                                        </td>
-
-                                        {/* Customer */}
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-slate-700">{order.customer || "Bez mena"}</span>
-                                            </div>
-                                        </td>
-
-                                        {/* Item */}
-                                        <td className="px-6 py-4 max-w-[300px]">
-                                            <div className="flex flex-col">
-                                                <span className="text-xs font-bold text-slate-900 truncate block">
-                                                    {order.items?.[0]?.name || "Neznáma položka"}
-                                                </span>
-                                                <div className="flex flex-wrap gap-1 mt-1">
-                                                    {order.items?.[0]?.templateKey && (
-                                                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-black uppercase border border-blue-100">
-                                                            {order.items[0].templateKey}
-                                                        </span>
-                                                    )}
-                                                    {order.items?.[0]?.material && (
-                                                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-bold uppercase">
-                                                            {order.items[0].material}
-                                                        </span>
+                                    return (
+                                        <tr key={order.id} className="hover:bg-slate-50/50 transition-colors group">
+                                            {/* Thumbnail */}
+                                            <td className="px-6 py-4 w-20">
+                                                <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center relative group-hover:shadow-md transition-all">
+                                                    {order.preview ? (
+                                                        <img src={order.preview} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-8 h-8 rounded-full border-2 border-slate-200 border-dashed animate-spin-slow opacity-20" />
                                                     )}
                                                 </div>
-                                            </div>
-                                        </td>
+                                            </td>
 
-                                        {/* Status */}
-                                        <td className="px-6 py-4">
-                                            {getStatusBadge(order.status)}
-                                        </td>
+                                            {/* ID / Source */}
+                                            <td className="px-6 py-4">
+                                                <div>
+                                                    <span className="text-lg font-black text-slate-900 block">#{order.number}</span>
+                                                    <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest truncate max-w-[120px] block">
+                                                        {order.shopName || 'E-shop'}
+                                                    </span>
+                                                </div>
+                                            </td>
 
-                                        {/* Action */}
-                                        <td className="px-6 py-4 text-right">
-                                            <Link
-                                                href={`/orders/${order.id}`}
-                                                className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-all shadow-lg shadow-slate-200 hover:shadow-blue-200"
-                                            >
-                                                Otvoriť <ExternalLink size={12} />
-                                            </Link>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            {/* Date */}
+                                            <td className="px-6 py-4">
+                                                <span className="text-sm font-bold text-slate-700 block">{dateFormatted}</span>
+                                            </td>
+
+                                            {/* Time */}
+                                            <td className="px-6 py-4 hidden sm:table-cell">
+                                                <span className="text-sm font-bold text-slate-500 block">{timeFormatted}</span>
+                                            </td>
+
+                                            {/* Customer */}
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-slate-700">{order.customer || "Bez mena"}</span>
+                                                </div>
+                                            </td>
+
+                                            {/* Item */}
+                                            <td className="px-6 py-4 max-w-[300px] hidden md:table-cell">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-bold text-slate-900 truncate block">
+                                                        {order.items?.[0]?.name || "Neznáma položka"}
+                                                    </span>
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        {order.items?.[0]?.templateKey && (
+                                                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-black uppercase border border-blue-100">
+                                                                {order.items[0].templateKey}
+                                                            </span>
+                                                        )}
+                                                        {order.items?.[0]?.material && (
+                                                            <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-bold uppercase">
+                                                                {order.items[0].material}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            {/* Status */}
+                                            <td className="px-6 py-4">
+                                                {getStatusBadge(order.status)}
+                                            </td>
+
+                                            {/* Action */}
+                                            <td className="px-6 py-4 text-right">
+                                                <Link
+                                                    href={`/orders/${order.id}`}
+                                                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-all shadow-lg shadow-slate-200 hover:shadow-blue-200"
+                                                >
+                                                    Otvoriť <ExternalLink size={12} />
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
                             </tbody>
                         </table>
                     </div>
