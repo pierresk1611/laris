@@ -146,12 +146,28 @@ export async function POST(req: Request) {
                             `;
 
                             try {
-                                const aiResponse = await groq.chat.completions.create({
-                                    messages: [{ role: 'user', content: prompt }],
-                                    model: "llama-3.3-70b-versatile",
-                                    temperature: 0.1,
-                                    response_format: { type: "json_object" }
-                                });
+                                let aiResponse;
+                                try {
+                                    aiResponse = await groq.chat.completions.create({
+                                        messages: [{ role: 'user', content: prompt }],
+                                        model: "llama-3.3-70b-versatile",
+                                        temperature: 0.1,
+                                        response_format: { type: "json_object" }
+                                    });
+                                } catch (primaryErr: any) {
+                                    const errorMessage = primaryErr?.message?.toLowerCase() || '';
+                                    if (primaryErr?.status === 429 || primaryErr?.error?.error?.code === 'rate_limit_exceeded' || errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+                                        console.warn(`[MatchProducts] Rate limit hit for 70b-versatile. Falling back to 8b-instant.`);
+                                        aiResponse = await groq.chat.completions.create({
+                                            messages: [{ role: 'user', content: prompt }],
+                                            model: "llama-3.1-8b-instant",
+                                            temperature: 0.1,
+                                            response_format: { type: "json_object" }
+                                        });
+                                    } else {
+                                        throw primaryErr;
+                                    }
+                                }
 
                                 const content = aiResponse.choices[0]?.message?.content || "{}";
                                 const result = JSON.parse(content);
@@ -165,7 +181,7 @@ export async function POST(req: Request) {
                                                     templateId: match.templateId,
                                                     matchConfidence: match.confidence
                                                 },
-                                                include: { template: true }
+                                                include: { template: { include: { files: { where: { type: 'MAIN' } } } } }
                                             });
                                             semanticMatches++;
                                             sendEvent({ type: 'match', product: updated });
