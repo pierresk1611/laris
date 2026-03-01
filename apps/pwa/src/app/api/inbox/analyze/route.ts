@@ -73,7 +73,14 @@ export async function POST(req: Request) {
                     response_format: { type: "json_object" }
                 });
             } catch (primaryError: any) {
-                if (primaryError?.error?.error?.code === 'rate_limit_exceeded' || primaryError.status === 429) {
+                const errorMessage = primaryError?.message?.toLowerCase() || '';
+                const isRateLimit =
+                    primaryError?.status === 429 ||
+                    primaryError?.error?.error?.code === 'rate_limit_exceeded' ||
+                    errorMessage.includes('rate limit') ||
+                    errorMessage.includes('429');
+
+                if (isRateLimit) {
                     console.warn(`[InboxAnalyze] Rate limit hit for 70b-versatile. Falling back to 8b-instant. Batch: ${i}-${i + BATCH_SIZE}`);
                     try {
                         // Fallback model (Faster/Cheaper, less likely to hit daily tokens)
