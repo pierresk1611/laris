@@ -70,7 +70,7 @@ export async function POST(request: Request) {
                 create: {
                     key: tpl.key,
                     name: tpl.name || tpl.key,
-                    status: "ACTIVE",
+                    status: "NEEDS_REVIEW",
                     imageUrl: tpl.imageUrl,
                     mappedPaths: 0
                 }

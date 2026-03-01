@@ -56,6 +56,7 @@ export async function POST(req: Request) {
                         // Variant detection (Logic mirrored from bulk-classify)
                         const v2Match = cleanName.match(/^ad_(.*?)_([OP])_(.*)$/i);
                         const oldMatch = cleanName.match(/^(.*?)_([OP])$/i);
+                        const spaceMatch = cleanName.match(/^(.*?)\s+([OP])$/i);
                         const aggressiveMatch = cleanName.match(/^([A-Z0-9_-]+?)([OP])$/i);
 
                         let potentialKey = cleanName.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
@@ -67,11 +68,15 @@ export async function POST(req: Request) {
                         } else if (oldMatch) {
                             potentialKey = oldMatch[1].replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
                             variantType = oldMatch[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
-                        } else if (aggressiveMatch && !cleanName.includes('_')) {
+                        } else if (spaceMatch) {
+                            potentialKey = spaceMatch[1].replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
+                            variantType = spaceMatch[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
+                        } else if (aggressiveMatch && !cleanName.includes('_') && !cleanName.includes(' ')) {
                             potentialKey = aggressiveMatch[1].toUpperCase();
                             variantType = aggressiveMatch[2].toUpperCase() === 'P' ? 'INVITE' : 'MAIN';
-                        } else if (cleanName.toUpperCase().endsWith('_P')) {
+                        } else if (cleanName.toUpperCase().endsWith('_P') || cleanName.toUpperCase().endsWith(' P')) {
                             variantType = 'INVITE';
+                            potentialKey = cleanName.substring(0, cleanName.length - 2).replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase();
                         }
 
                         const finalKey = extractedSku || potentialKey;
@@ -127,7 +132,7 @@ export async function POST(req: Request) {
                                     name: cleanName.replace(/_/g, ' '),
                                     displayName: cleanName.replace(/_/g, ' '),
                                     sku: extractedSku,
-                                    status: 'ACTIVE',
+                                    status: 'NEEDS_REVIEW',
                                     isVerified: false,
                                     imageUrl: inboxItem.thumbnailData || null,
                                     variants: [{ key: nameWithoutExt, type: variantType, path: pathDisplay, extension, mapping: {} }] as any

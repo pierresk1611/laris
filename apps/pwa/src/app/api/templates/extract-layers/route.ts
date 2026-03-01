@@ -106,11 +106,22 @@ export async function POST(req: Request) {
             }, { status: 400 });
         }
 
-        // .ai files cannot be read by ag-psd in cloud, they need the local agent (local agent logic assumed handled or we inform)
+        // .ai files cannot be read by ag-psd in cloud, they need the local agent
         if (ext === 'ai') {
+            // First check if DB already has layers extracted (e.g. from a past Agent run)
+            if (variant.layers && Array.isArray(variant.layers) && variant.layers.length > 0) {
+                console.log(`[CloudExtract] AI file detected, but layers already exist in DB. Returning saved layers.`);
+                const textLayerCount = variant.layers.filter((l: any) => l.type === 'TEXT').length;
+                return NextResponse.json({
+                    success: true,
+                    layers: variant.layers,
+                    textLayerCount
+                });
+            }
+
             return NextResponse.json({
                 success: false,
-                error: 'AI súbory vyžadujú lokálneho Agenta (Illustrator). Pre bleskové spracovanie v cloude použite .psd.',
+                error: 'AI súbory vyžadujú lokálneho Agenta (Illustrator). Počkajte na jeho pripojenie, alebo použite .psd.',
             }, { status: 400 });
         }
 

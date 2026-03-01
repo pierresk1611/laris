@@ -120,7 +120,7 @@ PRAVIDLÁ:
             }
         }
 
-        const newStatus = allVariantsReady ? 'ACTIVE' : 'NEEDS_REVIEW';
+        const newStatus = (allVariantsReady && totalMappedPathsAcrossVariants > 0) ? 'ACTIVE' : 'NEEDS_REVIEW';
 
         console.log(`[AIMapping] Persistence: totalMapped=${totalMappedPathsAcrossVariants}, status=${newStatus}`);
 
