@@ -465,17 +465,17 @@ export default function TemplatesPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ items: inboxItems })
             });
-            const data = await res.json();
+            const data = await res.json().catch(() => ({ error: "Nečitateľná odpoveď zo servera (možný Timeout)." }));
 
             if (data.success) {
                 toast.success("AI analýza dokončená! Skontrolujte návrhy.");
                 fetchData();
             } else {
-                toast.error(`Chyba AI: ${data.error}`);
+                toast.error(`Chyba AI: ${data.error || "Neznáma chyba"}`);
             }
-        } catch (e) {
-            console.error(e);
-            toast.error("Nepodarilo sa spustiť AI analýzu.");
+        } catch (e: any) {
+            console.error("[runAiAnalysis] Network/Fetch Error:", e);
+            toast.error(`Zlyhanie požiadavky: ${e.message || "Nepodarilo sa spojiť so serverom"}`);
         } finally {
             setIsAnalyzing(false);
         }

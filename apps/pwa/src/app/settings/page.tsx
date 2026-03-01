@@ -459,6 +459,33 @@ export default function SettingsPage() {
                                         placeholder="gsk_..."
                                     />
                                     <button
+                                        onClick={async () => {
+                                            const apiKey = getSettingValue('GROQ_API_KEY');
+                                            if (!apiKey) {
+                                                alert("Najprv zadajte a uložte Groq API Kľúč.");
+                                                return;
+                                            }
+                                            setSaving('TEST_GROQ');
+                                            try {
+                                                const res = await fetch('/api/settings/test-groq', { method: 'POST' });
+                                                const result = await res.json();
+                                                if (result.success) {
+                                                    alert(`✅ Groq funguje! Model odpovedal za ${result.latencyMs}ms.\nSpráva: ${result.message}`);
+                                                } else {
+                                                    alert(`❌ Groq Test zlyhal:\n${result.error}`);
+                                                }
+                                            } catch (e: any) {
+                                                alert("Chyba testu: " + e.message);
+                                            } finally {
+                                                setSaving(null);
+                                            }
+                                        }}
+                                        disabled={saving !== null}
+                                        className="px-4 py-2 bg-purple-50 text-purple-600 border border-purple-200 rounded-xl font-bold text-xs hover:bg-purple-100 transition-colors"
+                                    >
+                                        {saving === 'TEST_GROQ' ? 'Testujem...' : 'Testovať Groq'}
+                                    </button>
+                                    <button
                                         onClick={() => handleSaveSetting('GROQ_API_KEY', getSettingValue('GROQ_API_KEY'), 'AI', true)}
                                         disabled={saving === 'GROQ_API_KEY'}
                                         className="px-6 bg-slate-900 text-white rounded-xl font-bold text-xs"
