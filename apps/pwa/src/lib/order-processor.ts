@@ -166,6 +166,17 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         if (extractedKeyFromTitle) {
                             // Try to find it in the primary Template Key map
                             templateInfo = templateMap.get(extractedKeyFromTitle) || null;
+
+                            // If exact match fails, do a 'includes' partial match on existing keys
+                            if (!templateInfo) {
+                                for (const [k, v] of templateMap.entries()) {
+                                    if (k.includes(extractedKeyFromTitle)) {
+                                        templateInfo = v;
+                                        break;
+                                    }
+                                }
+                            }
+
                             if (!templateInfo) {
                                 // Try finding it in WebProduct title map as a last resort
                                 templateInfo = webProductTitleMap.get(itemNameFiltered) || null;
