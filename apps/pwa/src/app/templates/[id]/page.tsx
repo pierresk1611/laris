@@ -24,6 +24,7 @@ import { toast } from "sonner";
 interface PsdLayer {
     name: string;
     type: 'TEXT' | 'IMAGE' | 'GROUP';
+    content?: string;
     mappedTo?: string;
 }
 
@@ -81,6 +82,22 @@ export default function TemplateDetailPage() {
     const [editingPath, setEditingPath] = useState<string>('');
     const [isEditingPath, setIsEditingPath] = useState(false);
     const [isSavingPath, setIsSavingPath] = useState(false);
+
+    const [showHiddenLayers, setShowHiddenLayers] = useState(false);
+
+    // Helper to determine if a layer is likely structural/graphic garbage
+    const isGarbageLayer = (layer: PsdLayer) => {
+        if (layer.type !== 'TEXT') return true;
+        const nameNode = layer.name.toLowerCase();
+        if (nameNode.includes('background') || nameNode.includes('bg') || nameNode.includes('pozadie')) return true;
+        if (nameNode.includes('rectangle') || nameNode.includes('shape') || nameNode.includes('ellipse')) return true;
+        if (nameNode.includes('line') || nameNode.includes('texture') || nameNode.includes('layer ')) return true;
+        return false;
+    };
+
+    // Filter layers based on current toggle state
+    const visibleLayers = layers.filter(l => showHiddenLayers || !isGarbageLayer(l));
+    const hiddenLayersCount = layers.length - visibleLayers.length;
 
     // Load existing mapping from DB
     useEffect(() => {
@@ -335,6 +352,7 @@ export default function TemplateDetailPage() {
                 const newLayers = data.layers.map((l: any) => ({
                     name: l.name,
                     type: l.type,
+                    content: l.content,
                     mappedTo: l.mapping || ''
                 }));
                 setLayers(newLayers);
@@ -526,7 +544,10 @@ export default function TemplateDetailPage() {
                                                 }`}
                                         >
                                             <RefreshCw className={isLoadingLayers ? 'animate-spin' : ''} size={20} />
-                                            <span>{isLoadingLayers ? 'NAČÍTAVAM VRSTVY...' : 'NAČÍTAŤ VRSTVY Z PSD'}</span>
+                                            <span>
+                                                {isLoadingLayers ? 'NAČÍTAVAM VRSTVY...' :
+                                                    (currentExt === 'ai' && !layers.length ? 'ZÍSKAŤ VRSTVY Z AI (Vyžaduje Agenta)' : 'NAČÍTAŤ VRSTVY Z PSD')}
+                                            </span>
                                         </button>
 
                                         {isImage && (
@@ -545,7 +566,7 @@ export default function TemplateDetailPage() {
                                         {isSourceFormat && (
                                             <p className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter text-center leading-tight">
                                                 {currentExt === 'ai'
-                                                    ? "AI súbory vyžadujú lokálneho Agenta (Illustrator)."
+                                                    ? (layers.length > 0 ? "Vrstvy už boli extrahované Agentom. Mapovanie je dostupné offline." : "AI súbory vyžadujú lokálneho Agenta (Illustrator) na prečítanie vrstiev.")
                                                     : "Vykonáva sa bleskovo v cloude bez nutnosti spusteného agenta."}
                                             </p>
                                         )}
@@ -614,49 +635,69 @@ export default function TemplateDetailPage() {
 
                             {status === 'success' && (
                                 <div className="divide-y divide-slate-50">
-                                    {layers.map((layer, idx) => (
-                                        <div key={idx} className="p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
-                                            <div className="flex items-center gap-4">
-                                                <div className="p-2 bg-slate-100 rounded-lg">
-                                                    {layer.type === 'TEXT' ? <Type size={16} className="text-slate-400" /> : <Layers size={16} className="text-slate-400" />}
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-black text-slate-900">{layer.name}</p>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{layer.type} LAYER</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-4">
-                                                {layer.type !== 'TEXT' ? (
-                                                    <div className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-400 cursor-not-allowed select-none">
-                                                        Ignorované (Grafika)
+                                    {visibleLayers.map((layer, idx) => {
+                                        const originalIdx = layers.findIndex(l => l.name === layer.name);
+                                        return (
+                                            <div key={idx} className={`p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors ${isGarbageLayer(layer) ? 'opacity-50 grayscale' : ''}`}>
+                                                <div className="flex items-center gap-4 min-w-0 max-w-[60%]">
+                                                    <div className="p-2 bg-slate-100 rounded-lg shrink-0">
+                                                        {layer.type === 'TEXT' ? <Type size={16} className="text-slate-400" /> : <Layers size={16} className="text-slate-400" />}
                                                     </div>
-                                                ) : (
-                                                    <>
-                                                        <select
-                                                            className="pl-4 pr-10 py-2 bg-slate-100 border-none rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
-                                                            value={layer.mappedTo || ''}
-                                                            onChange={(e) => {
-                                                                const newLayers = [...layers];
-                                                                newLayers[idx].mappedTo = e.target.value;
-                                                                setLayers(newLayers);
-                                                            }}
-                                                        >
-                                                            <option value="">Nenamapované</option>
-                                                            {AVAILABLE_META_FIELDS.map(mf => (
-                                                                <option key={mf} value={mf}>{mf}</option>
-                                                            ))}
-                                                        </select>
-                                                        {layer.mappedTo && layer.mappedTo !== 'IGNORE' ? (
-                                                            <CheckCircle2 className="text-green-500" size={20} />
-                                                        ) : (
-                                                            <AlertCircle className="text-slate-200" size={20} />
-                                                        )}
-                                                    </>
-                                                )}
+                                                    <div className="min-w-0 overflow-hidden">
+                                                        {/* Truncated layer content/name */}
+                                                        <p className="text-sm font-black text-slate-900 truncate" title={layer.content || layer.name}>
+                                                            {layer.content || layer.name}
+                                                        </p>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate" title={layer.name}>
+                                                            {layer.content ? `LAYER: ${layer.name}` : `${layer.type} LAYER`}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {layer.type !== 'TEXT' ? (
+                                                        <div className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-400 cursor-not-allowed select-none">
+                                                            Ignorované (Grafika)
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <select
+                                                                className="pl-4 pr-10 py-2 bg-slate-100 border-none rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer w-[160px]"
+                                                                value={layer.mappedTo || ''}
+                                                                onChange={(e) => {
+                                                                    const newLayers = [...layers];
+                                                                    newLayers[originalIdx].mappedTo = e.target.value;
+                                                                    setLayers(newLayers);
+                                                                }}
+                                                            >
+                                                                <option value="">Nenamapované</option>
+                                                                {AVAILABLE_META_FIELDS.map(mf => (
+                                                                    <option key={mf} value={mf}>{mf}</option>
+                                                                ))}
+                                                            </select>
+                                                            {layer.mappedTo && layer.mappedTo !== 'IGNORE' ? (
+                                                                <div className="w-6 flex justify-center"><CheckCircle2 className="text-green-500 shrink-0" size={20} /></div>
+                                                            ) : (
+                                                                <div className="w-6 flex justify-center"><AlertCircle className="text-slate-200 shrink-0" size={20} /></div>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
+                                        )
+                                    })}
+
+                                    {/* Toggle Hidden Layers Button */}
+                                    {hiddenLayersCount > 0 && (
+                                        <div className="p-4 bg-slate-50/50 flex justify-center border-t border-slate-100">
+                                            <button
+                                                onClick={() => setShowHiddenLayers(!showHiddenLayers)}
+                                                className="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors px-4 py-2 rounded-lg hover:bg-slate-200/50 flex items-center gap-2"
+                                            >
+                                                {showHiddenLayers ? 'Skryť ignorované vrstvy' : `Zobraziť ${hiddenLayersCount} skrytých vrstiev`}
+                                            </button>
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
                             )}
                         </div>

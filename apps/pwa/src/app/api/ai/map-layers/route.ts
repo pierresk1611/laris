@@ -33,26 +33,28 @@ export async function POST(req: Request) {
 
         const groq = new Groq({ apiKey });
 
-        const systemPrompt = `Si expertný asistent pre pred-tlačovú prípravu. Tvojou úlohou je priradiť názvy vrstiev z Photoshop súboru k našim pevne definovaným systémovým meta-poliam na základe ich sémantického významu a účelu pre svadobné/spoločenské oznámenia.
+        const systemPrompt = `Si expertný asistent pre pred-tlačovú prípravu. Tvojou úlohou je priradiť textové vrstvy z Photoshop súboru k našim pevne definovaným systémovým meta-poliam na základe ich sémantického významu, názvu a HLAVNE ich skutočného textového obsahu (Content) pre svadobné/spoločenské oznámenia.
 
 Dostupné systémové meta-polia:
 ${AVAILABLE_META_FIELDS.join(", ")}
 
 Zoznam vrstiev z aktuálnej šablóny:
-${layers.map(l => l.name).join(", ")}
+${layers.map((l: any) => `Layer: '${l.name}'${l.content ? `, Text Content: '${l.content}'` : ''}`).join("\n")}
 
 PRAVIDLÁ:
-1. Priraď (namapuj) len textové vrstvy, ktoré jednoznačne pasujú k meta-poľu.
-2. Názvy ako "Meno", "Mená", "Jano_a_Zuzka" -> NAME_MAIN
-3. Názvy ako "Datum", "24_08_2024" -> DATE_MAIN
-4. Názvy ako "Cas", "15:00" -> TIME_MAIN
-5. Názvy ako "Miesto", "Kostol sv. Martina" -> PLACE_MAIN
-6. Názvy ako "Text Oznámenia", "Srdečne Vás pozývame" -> BODY_FULL
-7. Názvy ako "Citát", "Motto" -> QUOTE_TOP alebo QUOTE_BOTTOM
-8. Názvy ako "Pozvánka k stolu", "Prijmite pozvanie" -> INVITE_TEXT
-9. Názvy ako "Pätička", "RSVP", "Kontakt", "FOOTER_CONTENT" -> FOOTER_TEXT
-10. Ak dostaneš na namapovanie vrstvu s názvom obsahujúcim 'BG', 'BACKGROUND', 'POZADIE' alebo ide o grafický element, vráť pre ňu hodnotu 'IGNORE'. Tieto vrstvy nepotrebujeme mapovať.
-11. Tvoja odpoveď MUSÍ BYŤ LEN VALIDNÝ JSON vo formáte objektu, kde klúč je presný názov vrstvy (z PSD) a hodnota je presný názov meta-poľa (alebo 'IGNORE'/null). Nepíšte žiadne komentáre ani markdown.`;
+1. Priraď (namapuj) len textové vrstvy, ktoré jednoznačne pasujú k meta-poľu na základe ich Názvu alebo Textového Obsahu.
+2. Názvy ako "Meno", "Mená" alebo Textový obsah typu "Jano a Zuzka", "Marek", "Donoval" -> NAME_MAIN
+3. Názvy ako "Datum", "Termin" alebo Textový obsah typu "10. júna 2025", "24_08_2024", "15.08.2023" -> DATE_MAIN
+4. Názvy ako "Cas", "Hodina" alebo Textový obsah typu "15:00", "o 16:30 hod." -> TIME_MAIN
+5. Názvy ako "Miesto", "Adresa" alebo Textový obsah typu "Kostol sv. Martina", "u mňa doma v Dubnici nad Váhom" -> PLACE_MAIN
+6. Názvy ako "Text Oznámenia" alebo obsiahly text typu "Srdečne Vás pozývame", "S radosťou Vám oznamujeme" -> BODY_FULL
+7. Názvy ako "Citát", "Motto" alebo krátke hlboké myšlienky -> QUOTE_TOP alebo QUOTE_BOTTOM
+8. Názvy ako "Pozvánka k stolu", "Prijmite pozvanie" alebo text typu "Pozvánka k svadobnému stolu" -> INVITE_TEXT
+9. Názvy ako "Pätička", "RSVP", "Kontakt" -> FOOTER_TEXT
+10. Ak sa Názov vrstvy alebo jej Obsah hodí na meta pole, mapuj ho. Ak si nie si istý, ponechaj IGNORE. Názvy typu "Layer 1", "r1hiwwzjr461" ignoruj, *pokiaľ* ich textový obsah nedáva jasný zmysel (napr. ak je obsah "15:00", mapuj na TIME_MAIN).
+11. Ak dostaneš na namapovanie vrstvu s názvom obsahujúcim 'BG', 'BACKGROUND', 'POZADIE' alebo ide o grafický element bez obsahu, vráť pre ňu hodnotu 'IGNORE'.
+12. Tvoja odpoveď MUSÍ BYŤ LEN VALIDNÝ JSON vo formáte objektu, kde klúč je presný názov vrstvy (Názov z PSD) a hodnota je presný názov meta-poľa (alebo 'IGNORE'/null). Nepíšte žiadne komentáre ani markdown.`;
+
 
         const completion = await groq.chat.completions.create({
             messages: [{ role: "system", content: systemPrompt }],

@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 interface LayerInfo {
     name: string;
     type: 'TEXT' | 'IMAGE' | 'GROUP';
+    content?: string;
     mapping?: string | null;
 }
 
@@ -22,8 +23,11 @@ function extractLayersRecursive(children: any[]): LayerInfo[] {
             layers = [...layers, ...extractLayersRecursive(child.children)];
         } else {
             // It's a layer
-            const type = (child.text && child.text.text) ? 'TEXT' : 'IMAGE';
-            layers.push({ name: child.name, type });
+            if (child.text && child.text.text) {
+                layers.push({ name: child.name, type: 'TEXT', content: child.text.text });
+            } else {
+                layers.push({ name: child.name, type: 'IMAGE' });
+            }
         }
     }
 
