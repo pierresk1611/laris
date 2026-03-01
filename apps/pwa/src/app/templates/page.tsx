@@ -951,17 +951,48 @@ export default function TemplatesPage() {
                             <button
                                 onClick={async () => {
                                     setIsMatching(true);
+                                    setMatchProgress({ percentage: 0, label: 'Začínam párovanie...' });
                                     try {
                                         const res = await fetch('/api/templates/match-products', { method: 'POST' });
-                                        const data = await res.json();
-                                        if (data.success) {
-                                            toast.success(`Úspešne spárované: ${data.totalMapped} produktov.`);
-                                            fetchData();
-                                        } else {
-                                            toast.error(data.error);
+                                        if (!res.body) throw new Error("Server nevrátil odpoveď.");
+
+                                        const reader = res.body.getReader();
+                                        const decoder = new TextDecoder();
+                                        let buffer = '';
+
+                                        while (true) {
+                                            const { done, value } = await reader.read();
+                                            if (done) break;
+
+                                            buffer += decoder.decode(value, { stream: true });
+                                            const lines = buffer.split('\n');
+                                            buffer = lines.pop() || ''; // Posledný neukončený riadok si necháme
+
+                                            for (const line of lines) {
+                                                if (line.trim()) {
+                                                    try {
+                                                        const event = JSON.parse(line);
+                                                        if (event.type === 'progress') {
+                                                            setMatchProgress({ percentage: event.percentage, label: event.message });
+                                                        } else if (event.type === 'match') {
+                                                            // Update konkrétneho riadku v reálnom čase!
+                                                            setWebProducts(current =>
+                                                                current.map(p => p.id === event.product.id ? event.product : p)
+                                                            );
+                                                        } else if (event.type === 'done') {
+                                                            toast.success(`Spárované (Presné: ${event.exactMatches}, AI: ${event.semanticMatches})`);
+                                                        } else if (event.type === 'error') {
+                                                            toast.error(`Chyba: ${event.message}`);
+                                                        }
+                                                    } catch (err) {
+                                                        // Ignorujeme chyby parsovania chunkov
+                                                    }
+                                                }
+                                            }
                                         }
-                                    } catch (e) {
-                                        toast.error("Chyba pri párovaní.");
+                                        fetchData(); // Na záver ešte raz pre istotu všetko refreshneme
+                                    } catch (e: any) {
+                                        toast.error("Chyba spojenia: " + e.message);
                                     } finally {
                                         setIsMatching(false);
                                     }
