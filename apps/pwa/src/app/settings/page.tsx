@@ -304,6 +304,24 @@ export default function SettingsPage() {
                                 </h3>
                                 <div className="flex gap-2">
                                     <button
+                                        onClick={async () => {
+                                            setSaving(`sync-${shop.id}`);
+                                            try {
+                                                const res = await fetch('/api/templates/sync-products', { method: 'POST' });
+                                                const result = await res.json();
+                                                alert(result.success ? `✅ ${result.message}` : `❌ Chyba: ${result.error}`);
+                                            } catch (e) {
+                                                alert("❌ Chyba pri synchronizácii webových produktov.");
+                                            } finally {
+                                                setSaving(null);
+                                            }
+                                        }}
+                                        disabled={saving !== null}
+                                        className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                                    >
+                                        {saving === `sync-${shop.id}` ? "Sťahujem..." : "Stiahnuť produkty z webu"}
+                                    </button>
+                                    <button
                                         onClick={() => testConnection(shop)}
                                         disabled={saving !== null}
                                         className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"

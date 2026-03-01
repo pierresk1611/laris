@@ -137,6 +137,15 @@ model AiClassificationExample {
   createdAt DateTime @default(now())
 }
 
+model WebProduct {
+  id        String   @id @default(cuid())
+  title     String
+  permalink String?
+  sku       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum Role {
   SUPER_ADMIN
   OPERATOR

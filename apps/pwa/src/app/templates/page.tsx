@@ -137,6 +137,7 @@ export default function TemplatesPage() {
     // Inbox State
     const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [inboxFilter, setInboxFilter] = useState<'ALL' | 'PSD' | 'AI' | 'IMAGES' | 'OTHER'>('ALL');
 
     // Common State
     const [isSyncing, setIsSyncing] = useState(false);
@@ -386,11 +387,22 @@ export default function TemplatesPage() {
         });
     };
 
+    const filteredInboxItems = useMemo(() => {
+        if (inboxFilter === 'ALL') return inboxItems;
+        return inboxItems.filter(item => {
+            const ext = item.extension.toLowerCase();
+            if (inboxFilter === 'PSD') return ext === '.psd' || ext === '.psdt' || ext === '.psb';
+            if (inboxFilter === 'AI') return ext === '.ai';
+            if (inboxFilter === 'IMAGES') return ['.png', '.jpg', '.jpeg', '.webp'].includes(ext);
+            return !['.psd', '.psdt', '.psb', '.ai', '.png', '.jpg', '.jpeg', '.webp'].includes(ext);
+        });
+    }, [inboxItems, inboxFilter]);
+
     const toggleSelectAll = () => {
-        if (selectedItems.size === inboxItems.length) {
+        if (selectedItems.size === filteredInboxItems.length && filteredInboxItems.length > 0) {
             setSelectedItems(new Set());
         } else {
-            setSelectedItems(new Set(inboxItems.map(i => i.id)));
+            setSelectedItems(new Set(filteredInboxItems.map(i => i.id)));
         }
     };
 
@@ -425,7 +437,7 @@ export default function TemplatesPage() {
 
     const groupedInbox = useMemo(() => {
         const groups: Record<string, InboxItem[]> = {};
-        inboxItems.forEach(item => {
+        filteredInboxItems.forEach(item => {
             const name = item.name;
             const withoutExt = name.substring(0, name.lastIndexOf('.')) || name;
 
@@ -440,7 +452,7 @@ export default function TemplatesPage() {
             groups[groupKey].push(item);
         });
         return groups;
-    }, [inboxItems]);
+    }, [filteredInboxItems]);
 
     const toggleGroup = (key: string) => {
         setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
@@ -729,11 +741,40 @@ export default function TemplatesPage() {
                 </div>
             ) : (
                 /* INBOX TAB */
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                    {inboxItems.length === 0 ? (
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+                    {/* Inbox Filters */}
+                    {inboxItems.length > 0 && (
+                        <div className="flex items-center gap-2 p-4 border-b border-slate-100 overflow-x-auto bg-slate-50/50">
+                            {[
+                                { id: 'ALL', label: 'Všetko' },
+                                { id: 'PSD', label: 'PSD Súbory' },
+                                { id: 'AI', label: 'Illustrator (AI)' },
+                                { id: 'IMAGES', label: 'Obrázky (PNG/JPG)' },
+                                { id: 'OTHER', label: 'Ostatné / Dokumenty' }
+                            ].map(filter => (
+                                <button
+                                    key={filter.id}
+                                    onClick={() => {
+                                        setInboxFilter(filter.id as any);
+                                        setSelectedItems(new Set()); // Reset selection on filter change
+                                    }}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${inboxFilter === filter.id
+                                            ? 'bg-blue-600 text-white shadow-md'
+                                            : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'
+                                        }`}
+                                >
+                                    {filter.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {filteredInboxItems.length === 0 ? (
                         <div className="py-20 text-center">
                             <Inbox size={48} className="mx-auto text-slate-200 mb-4" />
-                            <h3 className="text-lg font-bold text-slate-400">Inbox je prázdny</h3>
+                            <h3 className="text-lg font-bold text-slate-400">
+                                {inboxItems.length === 0 ? 'Inbox je prázdny' : 'Zvolenému filtru nevyhovujú žiadne súbory'}
+                            </h3>
                             <p className="text-sm text-slate-400">Skúste spustiť "Skenovať Dropbox" pre načítanie nových súborov.</p>
                         </div>
                     ) : (
@@ -745,7 +786,7 @@ export default function TemplatesPage() {
                                             <input
                                                 type="checkbox"
                                                 className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-                                                checked={inboxItems.length > 0 && selectedItems.size === inboxItems.length}
+                                                checked={filteredInboxItems.length > 0 && selectedItems.size === filteredInboxItems.length}
                                                 onChange={toggleSelectAll}
                                             />
                                         </th>

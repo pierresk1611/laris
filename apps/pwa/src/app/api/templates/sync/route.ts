@@ -101,6 +101,11 @@ export async function POST(req: Request) {
 
         const validFiles = entries.filter(e => {
             if (e['.tag'] !== 'file') return false;
+
+            const pathLower = e.path_lower || '';
+            // Rule: Ignore everything inside the /OUTPUT/ folder
+            if (pathLower.includes('/output/')) return false;
+
             const name = e.name.toLowerCase();
             return graphicExtensions.some(ext => name.endsWith(ext));
         });
@@ -116,6 +121,164 @@ export async function POST(req: Request) {
             const name = entry.name;
             const pathDisplay = entry.path_display || entry.path_lower || name;
             const extension = name.includes('.') ? name.substring(name.lastIndexOf('.')).toLowerCase() : '';
+
+            // Auto-Promotion Rule 1
+            const isAutoPromoted = name.toLowerCase().startsWith('ad_') ||
+                name.toLowerCase().includes('pozvanka') ||
+                name.toLowerCase().includes('oznamenie');
+
+            if (isAutoPromoted) {
+                const nameWithoutExt = name.includes('.') ? name.substring(0, name.lastIndexOf('.')) : name;
+                const isInvitation = name.toLowerCase().startsWith('pozvanka na');
+
+                const v2Match = nameWithoutExt.match(/^ad_(.*?)_([OP])_(.*)$/i);
+                const skuMatch = nameWithoutExt.match(/(?:^|[_ ])([A-Z0-9]{3,})(_[OP])?$/i); // Generic SKU match
+
+                const sku = v2Match ? v2Match[1].toUpperCase() : (skuMatch ? skuMatch[1].toUpperCase() : nameWithoutExt);
+                const variantSuffix = v2Match ? v2Match[2].toUpperCase() : (skuMatch && skuMatch[2] ? skuMatch[2].substring(1).toUpperCase() : 'O');
+
+                const groupKey = isInvitation ? `INVITATION_${sku}` : sku;
+                const templateName = isInvitation ? `Pozvánka - ${sku}` : sku;
+                const variantType = variantSuffix === 'P' ? 'INVITE' : 'MAIN';
+
+                // Upsert Template
+                // @ts-ignore
+                let template = await prisma.template.findUnique({ where: { key: groupKey } });
+                if (!template) {
+                    // @ts-ignore
+                    template = await prisma.template.create({
+                        data: {
+                            key: groupKey,
+                            name: templateName,
+                            displayName: templateName,
+                            status: 'ACTIVE',
+                            isVerified: false
+                        }
+                    });
+                    newInboxItems++;
+                }
+
+                // Upsert TemplateFile
+                // @ts-ignore
+                await prisma.templateFile.upsert({
+                    where: {
+                        templateId_type: {
+                            templateId: template.id,
+                            type: variantType
+                        }
+                    },
+                    update: {
+                        path: pathDisplay,
+                        extension: extension
+                    },
+                    create: {
+                        templateId: template.id,
+                        type: variantType,
+                        path: pathDisplay,
+                        extension: extension
+                    }
+                });
+
+                // Ensure it's not in Inbox
+                // @ts-ignore
+                await prisma.fileInbox.deleteMany({ where: { path: pathDisplay } });
+
+                totalCount++;
+                if (totalCount % 10 === 0) {
+                    await updateProgress('SYNC_PROGRESS', totalCount, 0, `Spracovávam súbory... (${totalCount})`);
+                }
+
+                continue; // Skip adding to Inbox
+            }
+
+            // Auto-Promotion Rule 2 (Web Match)
+            const nameWithoutExt = name.includes('.') ? name.substring(0, name.lastIndexOf('.')) : name;
+
+            // Allow matching if the filename CONTAINS the web product title (case-insensitive)
+            // To avoid matching very short generic words, we ensure product title is at least 4 chars
+            // @ts-ignore
+            const webMatch = await prisma.webProduct.findFirst({
+                where: {
+                    title: {
+                        contains: nameWithoutExt,
+                        mode: 'insensitive'
+                    }
+                }
+            });
+
+            // If not found by substring, try reverse (if filename contains the web title)
+            // E.g. Filename="Pozvanka Futbal 2024", WebTitle="Futbal"
+            let finalMatchedProduct: any = webMatch;
+
+            if (!finalMatchedProduct) {
+                // @ts-ignore
+                const allProducts = await prisma.webProduct.findMany({
+                    select: { id: true, title: true, sku: true }
+                });
+
+                const lowerName = nameWithoutExt.toLowerCase();
+                // Find first product whose title (length > 4) is contained in the filename
+                finalMatchedProduct = allProducts.find((p: any) =>
+                    p.title.length > 4 && lowerName.includes(p.title.toLowerCase())
+                ) || null;
+            }
+
+            if (finalMatchedProduct) {
+                // Auto-promote based on Web Match
+                const sku = finalMatchedProduct.sku || finalMatchedProduct.title;
+                const groupKey = `WEB_${sku}`;
+                const templateName = finalMatchedProduct.title;
+                const variantType = 'MAIN'; // Defaulting to MAIN for web matches unless specified
+
+                // Upsert Template
+                // @ts-ignore
+                let template = await prisma.template.findUnique({ where: { key: groupKey } });
+                if (!template) {
+                    // @ts-ignore
+                    template = await prisma.template.create({
+                        data: {
+                            key: groupKey,
+                            name: templateName,
+                            displayName: templateName,
+                            status: 'ACTIVE',
+                            isVerified: false
+                        }
+                    });
+                    newInboxItems++;
+                }
+
+                // Upsert TemplateFile
+                // @ts-ignore
+                await prisma.templateFile.upsert({
+                    where: {
+                        templateId_type: {
+                            templateId: template.id,
+                            type: variantType
+                        }
+                    },
+                    update: {
+                        path: pathDisplay,
+                        extension: extension
+                    },
+                    create: {
+                        templateId: template.id,
+                        type: variantType,
+                        path: pathDisplay,
+                        extension: extension
+                    }
+                });
+
+                // Ensure it's not in Inbox
+                // @ts-ignore
+                await prisma.fileInbox.deleteMany({ where: { path: pathDisplay } });
+
+                totalCount++;
+                if (totalCount % 10 === 0) {
+                    await updateProgress('SYNC_PROGRESS', totalCount, 0, `Spracovávam súbory... (${totalCount})`);
+                }
+
+                continue; // Skip adding to Inbox
+            }
 
             // Check if it's already in Inbox?
             // @ts-ignore
