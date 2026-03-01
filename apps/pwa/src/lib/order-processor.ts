@@ -149,27 +149,48 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
 
                     let templateInfo: TemplateInfo | null = null;
 
-                    // First try WebProduct SKU map
+                    // A) First try WebProduct SKU map (Exact Match from shop)
                     if (itemSku) {
                         templateInfo = webProductSkuMap.get(itemSku) as any;
                     }
 
-                    // Then try WebProduct Title map
+                    // B) Try WebProduct Title map (Exact Title match from shop)
                     if (!templateInfo && itemNameFiltered) {
                         templateInfo = webProductTitleMap.get(itemNameFiltered) as any;
                     }
 
-                    // 1. Naming Convention v2: Try to match by Template SKU directly
+                    // C) Naming Convention v2: Try to match by Template SKU directly in our DB
                     if (!templateInfo && itemSku) {
                         templateInfo = skuMap.get(itemSku) || null;
                     }
 
+                    // D) Extraction: Try to pull a code (PNP01, 2022_5) from the item name
                     let templateKey = templateInfo ? templateInfo.key : null;
 
-                    // 2. Fallback to Regex parser if SKU/WebProduct didn't match
                     if (!templateInfo) {
                         templateKey = extractTemplateKey(item.name || "", (item.sku || "").toString());
-                        templateInfo = templateKey ? (templateMap.get(templateKey.toUpperCase()) || null) : null;
+                        if (templateKey) {
+                            // The extractor can return codes with or without spaces depending on regex.
+                            // We normalize the extracted key and template keys for comparison.
+                            const normalizedExtracted = templateKey.toUpperCase().replace(/\s+/g, '');
+
+                            // First try exact map (retro compatibility)
+                            templateInfo = templateMap.get(templateKey.toUpperCase()) || null;
+
+                            // If not found in exact map, search all normalized keys
+                            if (!templateInfo) {
+                                const foundTemplate = templates.find((t: any) => t.key.toUpperCase().replace(/\s+/g, '') === normalizedExtracted);
+                                if (foundTemplate) {
+                                    templateInfo = {
+                                        id: foundTemplate.id,
+                                        isVerified: foundTemplate.isVerified,
+                                        key: foundTemplate.key,
+                                        status: foundTemplate.status
+                                    };
+                                    templateKey = foundTemplate.key;
+                                }
+                            }
+                        }
                     }
 
                     // The original change had a redeclaration of templateInfo here.

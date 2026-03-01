@@ -136,8 +136,6 @@ const ProductMatchRow = ({ wp, templates, onUpdate }: { wp: any, templates: Temp
     const [isEditing, setIsEditing] = useState(false);
     const [search, setSearch] = useState('');
     const [isSaving, setIsSaving] = useState(false);
-
-    // Zatvoriť dropdown pri kliknutí mimo by bolo ideálne, tu použijeme onBlur trik na wrapperi
     const wrapperRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -151,7 +149,7 @@ const ProductMatchRow = ({ wp, templates, onUpdate }: { wp: any, templates: Temp
     }, []);
 
     const filteredTemplates = useMemo(() => {
-        if (!search) return templates.slice(0, 50); // Ukáž len prvých 50, ak nie je search, pre výkon
+        if (!search) return templates.slice(0, 50);
         const lower = search.toLowerCase();
         return templates.filter(t =>
             t.key.toLowerCase().includes(lower) ||
@@ -184,78 +182,87 @@ const ProductMatchRow = ({ wp, templates, onUpdate }: { wp: any, templates: Temp
         }
     };
 
-    // Extract thumbnail path from the active template's webProduct mapping
+    const handleConfirm = async () => {
+        if (!wp.templateId) return;
+        await handleSave(wp.templateId); // Re-saving manual sets confidence to 1.0
+    };
+
     const mainFile = wp.template?.files?.find((f: any) => f.type === 'MAIN') || wp.template?.files?.[0];
+    const isVerified = wp.templateId && (wp.matchConfidence >= 1.0 || !wp.matchConfidence);
+    const isAiSuggestion = wp.templateId && wp.matchConfidence < 1.0;
 
     return (
-        <tr className="hover:bg-slate-50 transition-colors group">
+        <tr className={`border-b border-slate-50 transition-colors ${isAiSuggestion ? 'bg-amber-50/30' : 'hover:bg-slate-50'}`}>
+            <td className="px-6 py-4 max-w-xs">
+                <p className="font-bold text-slate-900 text-sm leading-tight">{wp.title}</p>
+                <p className="text-[10px] text-slate-400 mt-1 uppercase font-mono tracking-tighter truncate">ID: {wp.id}</p>
+            </td>
+            <td className="px-6 py-4 text-xs text-slate-500 font-mono">
+                {wp.sku || <span className="text-slate-300 italic">bez SKU</span>}
+            </td>
             <td className="px-6 py-4">
-                <p className="font-bold text-slate-900 text-sm">{wp.title}</p>
-            </td>
-            <td className="px-6 py-4 text-sm text-slate-500 font-mono">
-                {wp.sku || '-'}
-            </td>
-            <td className="px-6 py-4 relative">
-                {wp.template ? (
-                    <div className="flex items-center gap-3">
-                        {mainFile && (
-                            <div className="group/thumb relative">
-                                <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-slate-200">
-                                    <ThumbnailViewer path={mainFile.path} extension={mainFile.extension || '.psd'} className="w-full h-full" />
-                                </div>
-                                {/* Hover Preview */}
-                                <div className="absolute left-10 top-1/2 -translate-y-1/2 z-50 hidden group-hover/thumb:block bg-white p-2 rounded-2xl shadow-2xl border border-slate-200 w-64 h-64 pointer-events-none">
-                                    <ThumbnailViewer path={mainFile.path} extension={mainFile.extension || '.psd'} className="w-full h-full rounded-xl" />
+                <div className="flex items-center gap-3">
+                    {/* CURRENT SELECTION OR BUTTON */}
+                    <div className="relative shrink-0" ref={wrapperRef}>
+                        {wp.template ? (
+                            <div className="flex items-center gap-2 pr-2">
+                                {mainFile && (
+                                    <div className="group/thumb relative">
+                                        <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-slate-200">
+                                            <ThumbnailViewer path={mainFile.path} extension={mainFile.extension || '.psd'} className="w-full h-full" />
+                                        </div>
+                                        <div className="absolute left-10 top-1/2 -translate-y-1/2 z-50 hidden group-hover/thumb:block bg-white p-2 rounded-2xl shadow-2xl border border-slate-200 w-64 h-64 pointer-events-none">
+                                            <ThumbnailViewer path={mainFile.path} extension={mainFile.extension || '.psd'} className="w-full h-full rounded-xl" />
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="flex flex-col min-w-[140px]">
+                                    <button
+                                        onClick={() => setIsEditing(true)}
+                                        className="text-left group/btn"
+                                    >
+                                        <span className={`text-xs font-black uppercase tracking-tight block group-hover/btn:text-blue-600 transition-colors ${isAiSuggestion ? 'text-amber-700' : 'text-slate-900'}`}>
+                                            {wp.template.displayName || wp.template.name}
+                                        </span>
+                                        <span className="text-[10px] text-slate-400 block font-mono">{wp.template.key}</span>
+                                    </button>
                                 </div>
                             </div>
-                        )}
-                        <div className="flex flex-col">
-                            <span className="font-bold text-blue-600 text-xs">{wp.template.displayName || wp.template.name}</span>
-                            <span className="text-[10px] text-slate-400">{wp.template.key}</span>
-                        </div>
-                        <button
-                            onClick={() => handleSave(null)}
-                            disabled={isSaving}
-                            className="ml-auto opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                            title="Zrušiť párovanie"
-                        >
-                            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
-                        </button>
-                    </div>
-                ) : (
-                    <div className="relative" ref={wrapperRef}>
-                        {!isEditing ? (
+                        ) : (
                             <button
                                 onClick={() => setIsEditing(true)}
-                                className="text-xs font-bold text-slate-400 hover:text-blue-600 border border-dashed border-slate-300 hover:border-blue-300 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2"
+                                className="text-xs font-bold text-slate-400 hover:text-blue-600 border border-dashed border-slate-300 hover:border-blue-300 hover:bg-blue-50 px-4 py-2 rounded-xl transition-all flex items-center gap-2"
                             >
                                 <Search size={14} />
                                 Vybrať šablónu
                             </button>
-                        ) : (
-                            <div className="absolute top-0 left-0 w-80 bg-white shadow-xl border border-slate-200 rounded-xl z-50 overflow-hidden">
-                                <div className="p-2 border-b border-slate-100 flex items-center gap-2">
-                                    <Search size={14} className="text-slate-400 ml-2" />
+                        )}
+
+                        {/* DROPDOWN */}
+                        {isEditing && (
+                            <div className="absolute top-0 left-0 w-80 bg-white shadow-2xl border border-slate-200 rounded-2xl z-50 overflow-hidden ring-4 ring-blue-50">
+                                <div className="p-3 border-b border-slate-100 flex items-center gap-2 bg-slate-50">
+                                    <Search size={14} className="text-slate-400 ml-1" />
                                     <input
                                         autoFocus
                                         value={search}
                                         onChange={e => setSearch(e.target.value)}
-                                        placeholder="Hľadať šablónu (napr. 001)..."
-                                        className="w-full text-sm outline-none px-2 py-1 bg-transparent"
+                                        placeholder="Hľadať šablónu..."
+                                        className="w-full text-sm outline-none px-2 py-1 bg-transparent font-bold"
                                     />
                                 </div>
-                                <div className="max-h-60 overflow-y-auto p-1">
+                                <div className="max-h-80 overflow-y-auto p-1 custom-scrollbar">
                                     {filteredTemplates.length === 0 ? (
-                                        <div className="p-4 text-center text-xs text-slate-400">Nenašli sa žiadne šablóny.</div>
+                                        <div className="p-8 text-center text-xs text-slate-400 italic">Nenašli sa žiadne šablóny.</div>
                                     ) : (
                                         filteredTemplates.map(t => (
                                             <button
                                                 key={t.id}
                                                 onClick={() => handleSave(t.id)}
-                                                className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded-lg flex flex-col gap-0.5"
+                                                className="w-full text-left px-4 py-3 hover:bg-blue-50 rounded-xl flex flex-col gap-0.5 group transition-colors"
                                             >
-                                                <span className="text-xs font-bold text-slate-900">{t.displayName || t.name}</span>
-                                                <span className="text-[10px] text-slate-500">{t.key}</span>
+                                                <span className="text-xs font-black text-slate-900 group-hover:text-blue-700 uppercase tracking-tight">{t.displayName || t.name}</span>
+                                                <span className="text-[10px] text-slate-400 font-mono tracking-widest">{t.key}</span>
                                             </button>
                                         ))
                                     )}
@@ -263,26 +270,57 @@ const ProductMatchRow = ({ wp, templates, onUpdate }: { wp: any, templates: Temp
                             </div>
                         )}
                     </div>
-                )}
-            </td>
-            <td className="px-6 py-4">
-                {wp.templateId ? (
-                    <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-[10px] font-black uppercase flex items-center gap-1">
-                            <CheckCircle2 size={12} />
-                            Spárované
-                        </span>
-                        {wp.matchConfidence && wp.matchConfidence < 1.0 && (
-                            <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded font-bold" title="Umelá inteligencia si nie je 100% istá. Vizuálne overte.">
-                                AI ({(wp.matchConfidence * 100).toFixed(0)}%)
-                            </span>
+
+                    {/* ACTIONS: CONFIRM / UNPAIR */}
+                    <div className="flex items-center gap-1">
+                        {isAiSuggestion && (
+                            <button
+                                onClick={handleConfirm}
+                                disabled={isSaving}
+                                title="Potvrdiť výber AI"
+                                className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 shadow-sm transition-all transform hover:scale-105 active:scale-95"
+                            >
+                                <CheckCircle2 size={16} />
+                            </button>
+                        )}
+                        {wp.templateId && (
+                            <button
+                                onClick={() => handleSave(null)}
+                                disabled={isSaving}
+                                title="Zrušiť prepojenie"
+                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            >
+                                <XCircle size={16} />
+                            </button>
                         )}
                     </div>
+                </div>
+            </td>
+            <td className="px-6 py-4 text-right">
+                {isVerified ? (
+                    <div className="flex items-center justify-end gap-2">
+                        <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-green-200">
+                            <Zap size={10} fill="currentColor" />
+                            Overené
+                        </span>
+                    </div>
+                ) : isAiSuggestion ? (
+                    <div className="flex flex-col items-end gap-1">
+                        <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-amber-200">
+                            <Sparkles size={10} className="text-amber-500" />
+                            Návrh (z názvu)
+                        </span>
+                        <span className="text-[9px] font-bold text-amber-500 mr-1 opacity-70">
+                            (Čaká na potvrdenie)
+                        </span>
+                    </div>
                 ) : (
-                    <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-[10px] font-black uppercase flex items-center gap-1 w-fit">
-                        <AlertCircle size={12} />
-                        Chýba Šablóna
-                    </span>
+                    <div className="flex justify-end">
+                        <span className="px-3 py-1 bg-red-50 text-red-500 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-100">
+                            <AlertCircle size={10} />
+                            Nenapárované
+                        </span>
+                    </div>
                 )}
             </td>
         </tr>

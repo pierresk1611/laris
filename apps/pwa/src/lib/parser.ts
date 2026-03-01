@@ -13,9 +13,13 @@ export function extractTemplateKey(productName: string, sku?: string): string | 
         }
     }
 
-    // 2. Fallback to old regex for backwards compatibility
+    // 2. Fallback to Regex for backwards compatibility and modern codes in titles
     if (!productName) return null;
-    const regex = /([A-Z]{3}\s\d{2,3})/i;
+
+    // Look for common code patterns:
+    // - Old style: JSO 15
+    // - New style: PNP01, 2022_5, MOD2025_17, OZN-01
+    const regex = /([A-Z]{2,4}\s?\d{1,3}|[A-Z0-9]{3,8}_\d{1,3}|[A-Z]{3,5}-\d{1,3})/i;
     const match = String(productName).match(regex);
     return match ? match[1].toUpperCase() : null;
 }
