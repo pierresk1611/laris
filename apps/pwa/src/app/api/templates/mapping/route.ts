@@ -42,61 +42,62 @@ export async function POST(request: Request) {
 
         if (!key) return NextResponse.json({ success: false, error: 'Key required' }, { status: 400 });
 
-        const template = await prisma.template.findUnique({ where: { key } });
-        // @ts-ignore
-        const existingVariants: any[] = Array.isArray(template?.variants) ? template.variants : [];
+        const template = await prisma.template.findUnique({
+            where: { key },
+            include: { files: true }
+        });
 
-        // Find existing variant or create a placeholder for this type
-        let targetVariantIndex = existingVariants.findIndex(v => v.type === (variantType || 'MAIN'));
-        if (targetVariantIndex === -1 && variantType) {
-            existingVariants.push({ type: variantType, mapping: mappingData });
-            targetVariantIndex = existingVariants.length - 1;
-        } else if (targetVariantIndex !== -1) {
+        if (!template) return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 });
+
+        const variant = variantType || 'MAIN';
+        const mappedCount = Object.keys(mappingData || {}).length;
+
+        // Determine Status for this specific variant
+        let finalStatus = 'PENDING_MAPPING';
+        if (mappedCount > 0) {
+            // If all text fields are mapped, it's ACTIVE, otherwise NEEDS_REVIEW
+            if (totalTextLayers !== undefined && mappedCount >= totalTextLayers && totalTextLayers > 0) {
+                finalStatus = 'ACTIVE';
+            } else {
+                finalStatus = 'NEEDS_REVIEW';
+            }
+        }
+
+        // 1. Update relational TemplateFile
+        await prisma.templateFile.update({
+            where: {
+                templateId_type: {
+                    templateId: template.id,
+                    type: variant
+                }
+            },
+            data: {
+                mapping: mappingData
+            }
+        });
+
+        // 2. Synchronize legacy JSON (for backward compatibility if needed)
+        const existingVariants: any[] = Array.isArray(template.variants) ? JSON.parse(JSON.stringify(template.variants)) : [];
+        let targetVariantIndex = existingVariants.findIndex(v => v.type === variant);
+        if (targetVariantIndex === -1) {
+            existingVariants.push({ type: variant, mapping: mappingData });
+        } else {
             existingVariants[targetVariantIndex].mapping = mappingData;
         }
 
-        const mappedCount = Object.keys(mappingData || {}).length;
+        // 3. Update main Template status based on overall readiness
+        // If ANY file is PENDING_MAPPING, the template might be NEEDS_REVIEW or PENDING_MAPPING
+        // But the user rule says "Template is ACTIVE if at least one field is mapped".
+        // Actually, let's be strict: Template is ACTIVE only if the current saved variant is ACTIVE
+        // or if we have a global consensus.
 
-        let currentVariantStatus = 'ERROR';
-        if (totalTextLayers !== undefined) {
-            if (mappedCount >= totalTextLayers && totalTextLayers > 0) {
-                currentVariantStatus = 'ACTIVE';
-            } else if (mappedCount > 0) {
-                currentVariantStatus = 'NEEDS_REVIEW';
-            }
-        } else {
-            currentVariantStatus = mappedCount > 0 ? 'ACTIVE' : 'ERROR';
-        }
-
-        let allUnmapped = true;
-        existingVariants.forEach((v, index) => {
-            if (index !== targetVariantIndex) {
-                const vMappedCount = Object.keys(v.mapping || {}).length;
-                if (vMappedCount > 0) allUnmapped = false;
-            }
-        });
-        if (mappedCount > 0) allUnmapped = false;
-
-        let finalStatus = currentVariantStatus;
-        if (currentVariantStatus === 'ERROR' && !allUnmapped) {
-            finalStatus = 'NEEDS_REVIEW';
-        }
-
-        const updatedTemplate = await prisma.template.upsert({
+        const updatedTemplate = await prisma.template.update({
             where: { key },
-            update: {
-                // @ts-ignore
-                variants: existingVariants,
-                mappedPaths: Object.keys(mappingData || {}).length, // Can represent current active saving
-                status: finalStatus
-            },
-            create: {
-                key,
-                name: key, // default name
-                // @ts-ignore
-                variants: existingVariants,
-                mappedPaths: Object.keys(mappingData || {}).length,
-                status: finalStatus
+            data: {
+                variants: existingVariants as any,
+                mappedPaths: mappedCount,
+                status: finalStatus, // Use the status of the variant we just saved
+                updatedAt: new Date()
             }
         });
 

@@ -11,6 +11,7 @@ const AGENT_TOKEN = process.env.AGENT_ACCESS_TOKEN;
 const LOCAL_ROOT_PATH = process.env.LOCAL_ROOT_PATH;
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '10000', 10);
 const PHOTOSHOP_APP_NAME = process.env.PHOTOSHOP_APP_NAME || 'Adobe Photoshop 2024';
+const ILLUSTRATOR_APP_NAME = process.env.ILLUSTRATOR_APP_NAME || 'Adobe Illustrator 2024';
 
 console.log('--- AUTO DESIGN LOCAL AGENT v2.1 (Layer Scan Enabled) ---');
 console.log(`API URL: ${API_URL}`);
@@ -92,56 +93,36 @@ async function processJob(job) {
 }
 
 
-// --- LAYER SCAN (Node.js native) ---
+// --- LAYER SCAN (Node.js native for PSD, App-based for AI) ---
 async function processLayerScan(job) {
+    const filePath = job.payload.path;
+    const isAi = filePath.toLowerCase().endsWith('.ai');
+
+    if (isAi) {
+        return processIllustratorLayerScan(job);
+    }
+
+    // Default PSD logic
     const { readPsd } = require('ag-psd');
-    // require('ag-psd/initialize-canvas')(require('canvas')); // Not needed for metadata scan
-
     try {
-        // job.payload.path should be the relative path from Dropbox root? or Database Key?
-        // Usually Inbox items have 'path' field which is Dropbox path display.
-        // E.g. /TEMPLATES/8.ai
-
-        console.log(`[Job ${job.id}] Scanning layers for: ${job.payload.path}`);
-
-        // 1. Download file from Dropbox
+        console.log(`[Job ${job.id}] Scanning PSD layers (ag-psd) for: ${filePath}`);
         const dbx = await getDropboxClient();
-
-        const response = await dbx.filesDownload({ path: job.payload.path });
-
-        // binary data is in response.result.fileBinary if using certain SDK versions/environments.
-        // In Node with 'dropbox' standard lib, it might be in 'fileBinary' or just returned buffer?
-        // Checking sdk docs or usage: usually result.fileBinary in Node.
-
+        const response = await dbx.filesDownload({ path: filePath });
         const fileBuffer = response.result.fileBinary || response.result.fileBlob;
 
         if (!fileBuffer) {
-            // Fallback for some SDK versions where it returns buffer directly or differently
-            // Actually, newer dropbox sdk in node returns valid response with fileBinary
             throw new Error("Failed to download file content from Dropbox (No binary data)");
         }
 
-        // 2. Parse PSD/AI
         const psd = readPsd(fileBuffer, { skipLayerImageData: true, skipThumbnail: true });
-
-        // 3. Extract Layers
         const layers = [];
         const traverse = (node) => {
-            if (node.children) {
-                node.children.forEach(traverse);
-            }
-            if (node.name) {
-                layers.push(node.name);
-            }
+            if (node.children) node.children.forEach(traverse);
+            if (node.name) layers.push({ name: node.name, type: node.type === 'TEXT' ? 'TEXT' : 'OTHER' });
         };
 
-        if (psd.children) {
-            psd.children.forEach(traverse);
-        }
+        if (psd.children) psd.children.forEach(traverse);
 
-        console.log(`[Job ${job.id}] Layers found: ${layers.length} layers.`);
-
-        // 4. Success
         await updateJobStatus(job.id, 'DONE', {
             layers: layers,
             width: psd.width,
@@ -149,7 +130,65 @@ async function processLayerScan(job) {
         });
 
     } catch (error) {
-        console.error(`[ScanLayer] Error:`, error);
+        console.error(`[ScanLayer PSD] Error:`, error);
+        throw error;
+    }
+}
+
+async function processIllustratorLayerScan(job) {
+    const filePath = job.payload.path;
+    const localPath = path.join(LOCAL_ROOT_PATH, filePath);
+
+    console.log(`[Job ${job.id}] Scanning AI layers (Illustrator) for: ${filePath}`);
+
+    // Check if file exists locally (Dropbox sync) or download it
+    let finalLocalPath = localPath;
+    if (!await fs.exists(localPath)) {
+        console.log(`[Job ${job.id}] File not found locally, downloading...`);
+        const dbx = await getDropboxClient();
+        const response = await dbx.filesDownload({ path: filePath });
+        const tempPath = path.join(os.tmpdir(), path.basename(filePath));
+        await fs.writeFile(tempPath, response.result.fileBinary);
+        finalLocalPath = tempPath;
+    }
+
+    const scriptPath = path.join(__dirname, '../scripts/extractLayersIllustrator.jsx');
+    const resultFile = path.join(os.tmpdir(), "ai_layers.json");
+    if (await fs.exists(resultFile)) await fs.remove(resultFile);
+
+    // AppleScript to open file and run JSX
+    const appleScript = `
+        tell application "${ILLUSTRATOR_APP_NAME}"
+            activate
+            open posix file "${finalLocalPath}"
+            do javascript file "${scriptPath}"
+            close every document saving no
+        end tell
+    `;
+
+    try {
+        await new Promise((resolve, reject) => {
+            exec(`osascript -e '${appleScript}'`, (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+
+        // Wait for result file
+        const result = await waitForFile(resultFile, null, 30000);
+        if (result.status === 'ERROR') throw new Error("Illustrator script failed");
+
+        await updateJobStatus(job.id, 'DONE', {
+            layers: result, // result is the parsed JSON array
+            isAi: true
+        });
+
+        // Cleanup temp if downloaded
+        if (finalLocalPath !== localPath) await fs.remove(finalLocalPath);
+        await fs.remove(resultFile);
+
+    } catch (error) {
+        console.error(`[ScanLayer AI] Error:`, error);
         throw error;
     }
 }

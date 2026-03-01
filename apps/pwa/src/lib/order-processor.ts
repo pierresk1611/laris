@@ -8,6 +8,7 @@ export interface ProcessedItem {
     quantity: number;
     templateKey: string | null;
     templateId: string | null;
+    templateStatus?: string; // NEW
     hasInvitation: boolean;
     material: string | null;
     options: Record<string, any>;
@@ -41,24 +42,24 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
             return [];
         }
 
-        // 1. Pre-fetch all active templates
-        const templates = await prisma.template.findMany({
-            where: { status: 'ACTIVE' }
-        }).catch((err: any) => {
+        // 1. Pre-fetch all templates
+        const templates = await prisma.template.findMany({}).catch((err: any) => {
             console.error("Prisma Templates fetch error:", err);
             return [];
         });
 
+        interface TemplateInfo { id: string, isVerified: boolean, key: string, status: string };
+
         // Map by Key (Legacy/Regex fallback)
-        const templateMap = new Map((templates as any[]).map((t: any) => [
+        const templateMap = new Map<string, TemplateInfo>((templates as any[]).map((t: any) => [
             t.key?.toUpperCase() || "UNKNOWN",
-            { id: t.id, isVerified: t.isVerified, key: t.key }
+            { id: t.id, isVerified: t.isVerified, key: t.key, status: t.status }
         ]));
 
         // Map by SKU (Native/Golden Key)
-        const skuMap = new Map((templates as any[]).filter(t => t.sku).map((t: any) => [
+        const skuMap = new Map<string, TemplateInfo>((templates as any[]).filter(t => t.sku).map((t: any) => [
             t.sku.toUpperCase(),
-            { id: t.id, isVerified: t.isVerified, key: t.key }
+            { id: t.id, isVerified: t.isVerified, key: t.key, status: t.status }
         ]));
 
         // 2. Pre-fetch all WebProducts to utilize Smart Match logic
@@ -70,14 +71,14 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
             return [];
         });
 
-        const webProductSkuMap = new Map((webProducts as any[]).filter(p => p.sku).map((p: any) => [
+        const webProductSkuMap = new Map<string, TemplateInfo>((webProducts as any[]).filter(p => p.sku).map((p: any) => [
             p.sku.toUpperCase(),
-            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key }
+            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key, status: p.template.status }
         ]));
 
-        const webProductTitleMap = new Map((webProducts as any[]).map((p: any) => [
+        const webProductTitleMap = new Map<string, TemplateInfo>((webProducts as any[]).map((p: any) => [
             p.title.trim().toLowerCase(),
-            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key }
+            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key, status: p.template.status }
         ]));
 
         const processedOrders: ProcessedOrder[] = [];
@@ -146,7 +147,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     const itemSku = (item.sku || "").toString().trim().toUpperCase();
                     const itemNameFiltered = (item.name || "").toString().trim().toLowerCase();
 
-                    let templateInfo: { id: string, isVerified: boolean, key: string } | null | undefined = null;
+                    let templateInfo: TemplateInfo | null = null;
 
                     // First try WebProduct SKU map
                     if (itemSku) {
@@ -160,7 +161,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
 
                     // 1. Naming Convention v2: Try to match by Template SKU directly
                     if (!templateInfo && itemSku) {
-                        templateInfo = skuMap.get(itemSku) as any;
+                        templateInfo = skuMap.get(itemSku) || null;
                     }
 
                     let templateKey = templateInfo ? templateInfo.key : null;
@@ -168,8 +169,13 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     // 2. Fallback to Regex parser if SKU/WebProduct didn't match
                     if (!templateInfo) {
                         templateKey = extractTemplateKey(item.name || "", (item.sku || "").toString());
-                        templateInfo = templateKey ? (templateMap.get(templateKey.toUpperCase()) as any) : null;
+                        templateInfo = templateKey ? (templateMap.get(templateKey.toUpperCase()) || null) : null;
                     }
+
+                    // The original change had a redeclaration of templateInfo here.
+                    // Instead, we ensure the existing templateInfo variable is correctly typed and populated.
+                    // The instruction was to ensure templateInfo has a status property, which it does now
+                    // because it's typed as TemplateInfo.
 
                     const metaData = item.meta_data || [];
                     const epo = parseEPO(metaData);
@@ -177,12 +183,14 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     // Smart Quantity Parsing
                     const quantities = parseItemQuantities(metaData, item.quantity || 1);
 
-                    const baseItem = {
+                    const baseItem: ProcessedItem = {
                         id: item.id || 0,
                         name: item.name || "Neznáma položka",
                         price: item.price || "0",
+                        quantity: 0, // placeholder, filled later
                         templateKey,
                         templateId: templateInfo?.id || null,
+                        templateStatus: templateInfo?.status,
                         hasInvitation: needsInvitation(item.name || "", metaData),
                         material: epo.material || null,
                         options: epo,

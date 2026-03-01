@@ -13,19 +13,18 @@ export async function POST(req: Request) {
             };
 
             try {
-                // 1. Fetch all UNCLASSIFIED items that AI predicted as TEMPLATE
-                // We fetch all at once to know the total count, but process one by one
-                const itemsToApprove = await prisma.fileInbox.findMany({
-                    where: {
-                        status: 'UNCLASSIFIED',
-                        // We filter by checking if prediction JSON contains TEMPLATE category
-                        // Note: Prisma Json filter for specific key
-                        prediction: {
-                            path: ['category'],
-                            equals: 'TEMPLATE'
-                        }
-                    }
+                // 1. Fetch all UNCLASSIFIED items
+                const unclassifiedItems = await prisma.fileInbox.findMany({
+                    where: { status: 'UNCLASSIFIED' }
                 });
+
+                // Filter in JS for reliability (Prisma JSON filters can be tricky across providers/versions)
+                const itemsToApprove = unclassifiedItems.filter(item => {
+                    const pred = item.prediction as any;
+                    return pred?.category === 'TEMPLATE';
+                });
+
+                console.log(`[BulkApprove] Found ${itemsToApprove.length} templates out of ${unclassifiedItems.length} unclassified items.`);
 
                 if (itemsToApprove.length === 0) {
                     sendEvent({ type: 'progress', message: 'Nenašli sa žiadne nové AI šablóny na schválenie.', percentage: 100 });

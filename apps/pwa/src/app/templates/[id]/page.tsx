@@ -508,16 +508,19 @@ export default function TemplateDetailPage() {
                         <div className="w-full flex flex-col items-center space-y-3">
                             {(() => {
                                 const currentVariant = variants.find(v => v.type === activeVariantType);
-                                const isCurrentPsd = currentVariant?.path?.toLowerCase().endsWith('.psd') || currentVariant?.path?.toLowerCase().endsWith('.psdt');
-                                const hasAnyPsd = variants.some(v => v.path?.toLowerCase().endsWith('.psd') || v.path?.toLowerCase().endsWith('.psdt'));
-                                const isImage = ['png', 'jpg', 'jpeg'].includes(currentVariant?.path?.split('.').pop()?.toLowerCase() || '');
+                                const currentExt = currentVariant?.path?.split('.').pop()?.toLowerCase() || '';
+                                const isSourceFormat = ['psd', 'psdt', 'ai'].includes(currentExt);
+                                const isImage = ['png', 'jpg', 'jpeg'].includes(currentExt);
+
+                                // Has any source format in the entire template?
+                                const hasAnySource = variants.some(v => v.path && ['psd', 'psdt', 'ai'].includes(v.path.toLowerCase().split('.').pop() || ''));
 
                                 return (
                                     <>
                                         <button
                                             onClick={handleLoadLayers}
-                                            disabled={isLoadingLayers || (!isCurrentPsd && !hasAnyPsd)}
-                                            className={`w-full py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition shadow-lg active:scale-[0.98] ${isLoadingLayers || (!isCurrentPsd && !hasAnyPsd)
+                                            disabled={isLoadingLayers || !isSourceFormat}
+                                            className={`w-full py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition shadow-lg active:scale-[0.98] ${isLoadingLayers || !isSourceFormat
                                                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                                                 : 'bg-slate-900 text-white hover:bg-slate-800'
                                                 }`}
@@ -526,21 +529,24 @@ export default function TemplateDetailPage() {
                                             <span>{isLoadingLayers ? 'NAČÍTAVAM VRSTVY...' : 'NAČÍTAŤ VRSTVY Z PSD'}</span>
                                         </button>
 
-                                        {!isCurrentPsd && hasAnyPsd && (
-                                            <p className="text-[10px] font-bold text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 text-center leading-tight">
-                                                Aktuálny náhľad je obrázok. Systém sa pokúsi automaticky použiť zdrojový .psd súbor priradený k tejto šablóne.
-                                            </p>
+                                        {isImage && (
+                                            <div className="w-full space-y-2">
+                                                <p className="text-[10px] font-bold text-red-500 bg-red-50 p-2.5 rounded-xl border border-red-100 text-center leading-tight">
+                                                    Varovanie: Toto je len obrázkový náhľad. Vrstvy je možné načítať a mapovať len zo zdrojového .psd súboru.
+                                                </p>
+                                                {hasAnySource && (
+                                                    <p className="text-[9px] font-medium text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 text-center leading-tight">
+                                                        Poznámka: Táto šablóna obsahuje PSD súbor. Pre načítanie vrstiev sa prosím prepnite na variantu so zdrojovým PSD.
+                                                    </p>
+                                                )}
+                                            </div>
                                         )}
 
-                                        {!isCurrentPsd && !hasAnyPsd && isImage && (
-                                            <p className="text-[10px] font-bold text-red-500 bg-red-50 p-2 rounded-lg border border-red-100 text-center leading-tight">
-                                                Toto je len obrázok náhľadu. Vrstvy sa dajú čítať len zo zdrojového PSD. Priložte k šablóne .psd súbor.
-                                            </p>
-                                        )}
-
-                                        {(isCurrentPsd || hasAnyPsd) && (
+                                        {isSourceFormat && (
                                             <p className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter text-center leading-tight">
-                                                Vykonáva sa bleskovo v cloude<br />bez nutnosti spusteného agenta.
+                                                {currentExt === 'ai'
+                                                    ? "AI súbory vyžadujú lokálneho Agenta (Illustrator)."
+                                                    : "Vykonáva sa bleskovo v cloude bez nutnosti spusteného agenta."}
                                             </p>
                                         )}
                                     </>

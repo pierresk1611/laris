@@ -53,74 +53,68 @@ export async function POST(req: Request) {
             include: { files: true }
         }) as any;
 
+        // ---- 1. RESOLVE TARGET FILE (Smart Selection) ----
         let variant = null;
         const relationalFiles = templateWithFiles?.files || [];
         const legacyVariants = (template.variants as any[]) || [];
 
+        const isPsdOrAi = (p: string) => {
+            const ext = p.toLowerCase().split('.').pop();
+            return ['psd', 'psdt', 'ai'].includes(ext || '');
+        };
+
+        // Try to find the specific variant index requested
         if (relationalFiles.length > 0) {
-            // Find by type (MAIN = 0, INVITE = 1)
-            const typeToFind = variantIndex === 0 ? 'MAIN' : 'INVITE';
+            const typeToFind = variantIndex === 0 ? 'MAIN' : variantIndex === 1 ? 'INVITE' : 'OTHER';
             variant = relationalFiles.find((f: any) => f.type === typeToFind);
             if (!variant && variantIndex < relationalFiles.length) {
                 variant = relationalFiles[variantIndex];
             }
         }
 
-        // Fallback to legacy variants if missing
         if (!variant && legacyVariants.length > 0) {
             variant = legacyVariants[variantIndex];
         }
 
-        // Smart PSD Selection: If the current variant is not a PSD/PSDT, try to find one in the template's files
-        const isPsd = (p: string) => p.toLowerCase().endsWith('.psd') || p.toLowerCase().endsWith('.psdt');
+        // SMART UPGRADE: If current selection is not PSD/AI, look for any PSD/AI in the same template
+        if (variant && variant.path && !isPsdOrAi(variant.path)) {
+            console.log(`[CloudExtract] Current variant ${variant.type} is not source data (${variant.path}). Searching for PSD/AI...`);
+            const sourceFile = relationalFiles.find((f: any) => isPsdOrAi(f.path)) ||
+                legacyVariants.find((v: any) => v.path && isPsdOrAi(v.path));
 
-        if (variant && variant.path && !isPsd(variant.path)) {
-            console.log(`[CloudExtract] Current variant ${variant.type} is not a PSD (${variant.path}). Searching for alternatives...`);
-            const psdFile = relationalFiles.find((f: any) => isPsd(f.path));
-            if (psdFile) {
-                console.log(`[CloudExtract] Found alternative PSD: ${psdFile.path}`);
-                variant = psdFile;
+            if (sourceFile) {
+                console.log(`[CloudExtract] Smart Upgrade: Using ${sourceFile.path} instead of selected image.`);
+                variant = sourceFile;
             }
         }
 
+        // ---- 2. VALIDATION & ERROR HANDLING ----
         if (!variant || !variant.path) {
-            const variantCode = variantIndex === 0 ? 'O' : 'P';
-            const errorMsg = `Súbor pre variant ${variantCode} nemá definovanú cestu na Dropboxe.`;
-
-            console.error(`[CloudExtract] CRITICAL: Database record for ${templateId} ${variantCode} is missing path.`, {
-                templateId,
-                variantIndex,
-                hasRelational: relationalFiles.length > 0,
-                hasLegacy: legacyVariants.length > 0
-            });
-
             return NextResponse.json({
                 success: false,
-                error: errorMsg,
-                details: `Missing path for template ${templateId} variant ${variantCode}`
+                error: `Súbor pre túto šablónu nemá definovanú cestu na Dropboxe.`,
             }, { status: 404 });
         }
 
-        // Final format check
         const ext = variant.path.split('.').pop()?.toLowerCase();
-        if (ext !== 'psd' && ext !== 'psdt') {
-            // Check if it's an image
-            const isImage = ['png', 'jpg', 'jpeg'].includes(ext || '');
-            if (isImage) {
-                return NextResponse.json({
-                    success: false,
-                    error: 'Toto je len obrázok náhľadu. Vrstvy sa dajú čítať len zo zdrojového PSD. Priložte k šablóne .psd súbor.',
-                }, { status: 400 });
-            }
 
-            // For AI files, we still can't use ag-psd, but we should inform the user to use PSD or wait for Print Agent for PDF.
-            // But per user request: "Zrušenie Agenta pre mapovanie".
+        // Strict Filter per User Request
+        if (!['psd', 'psdt', 'ai'].includes(ext || '')) {
             return NextResponse.json({
                 success: false,
-                error: 'Mapovanie vrstiev v cloude podporuje len .psd/.psdt. Pre .ai súbory prosím uložte kópiu ako .psd.',
-            });
+                error: `Formát .${ext} nepodporuje extrakciu vrstiev. Prosím použite .psd alebo .ai súbor.`,
+            }, { status: 400 });
         }
 
+        // .ai files cannot be read by ag-psd in cloud, they need the local agent (local agent logic assumed handled or we inform)
+        if (ext === 'ai') {
+            return NextResponse.json({
+                success: false,
+                error: 'AI súbory vyžadujú lokálneho Agenta (Illustrator). Pre bleskové spracovanie v cloude použite .psd.',
+            }, { status: 400 });
+        }
+
+        // ---- 3. CLOUD EXTRACTION (PSD ONLY) ----
         const dbx = await getDropboxClient();
 
         console.log(`[CloudExtract] Downloading ${variant.path}...`);
@@ -128,10 +122,10 @@ export async function POST(req: Request) {
         const fileBuffer = (dbxResponse.result as any).fileBinary;
 
         if (!fileBuffer) {
-            return NextResponse.json({ success: false, error: 'Failed to download file from Dropbox' }, { status: 500 });
+            return NextResponse.json({ success: false, error: 'Nepodarilo sa stiahnuť súbor z Dropboxu' }, { status: 500 });
         }
 
-        console.log(`[CloudExtract] Parsing PSD (skipping image data)...`);
+        console.log(`[CloudExtract] Parsing PSD...`);
         const psd = readPsd(fileBuffer, {
             skipLayerImageData: true,
             skipCompositeImageData: true,

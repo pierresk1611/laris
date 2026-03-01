@@ -310,7 +310,9 @@ export default function TemplatesPage() {
     const [lastSync, setLastSync] = useState<{ date: string; status: string } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isBulkMapping, setIsBulkMapping] = useState(false);
-    const [bulkProgress, setBulkProgress] = useState<{ percentage: number, label: string, status: string } | null>(null);
+    const [bulkMapProgress, setBulkMapProgress] = useState<{ percentage: number, label: string, current?: number, total?: number, status?: string } | null>(null);
+    const [syncProgress, setSyncProgress] = useState<{ percentage: number, label: string } | null>(null);
+    const [aiProgress, setAiProgress] = useState<{ percentage: number, label: string } | null>(null);
 
     // Multi-selection state
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -364,9 +366,7 @@ export default function TemplatesPage() {
         }
     }, []);
 
-    const [syncProgress, setSyncProgress] = useState<{ percentage: number, label: string } | null>(null);
-    const [aiProgress, setAiProgress] = useState<{ percentage: number, label: string } | null>(null);
-    const [bulkMapProgress, setBulkMapProgress] = useState<{ percentage: number, label: string, status: string } | null>(null);
+
 
     useEffect(() => {
         fetchData();
@@ -389,12 +389,6 @@ export default function TemplatesPage() {
                         if (data.bulkMap.status === 'COMPLETED') {
                             setIsBulkMapping(false);
                             fetchData();
-                        } else {
-                            setIsBulkMapping(true);
-                            // Refresh templates list during bulk process to see live changes
-                            fetch('/api/templates').then(r => r.json()).then(d => {
-                                if (d.success) setTemplates(d.templates);
-                            });
                         }
                     }
                 }
@@ -404,7 +398,61 @@ export default function TemplatesPage() {
         }, 2000);
 
         return () => clearInterval(interval);
-    }, [fetchData, isSyncing, isAnalyzing, isBulkMapping]);
+    }, [fetchData, isSyncing, isAnalyzing, isBulkMapping, isMatching]);
+
+    const handleBulkMapAI = async () => {
+        setIsBulkMapping(true);
+        setBulkMapProgress({ percentage: 0, label: "Pripravujem hromadné AI mapovanie...", current: 0, total: 0 });
+
+        try {
+            const res = await fetch('/api/templates/bulk-map', { method: 'POST' });
+
+            if (!res.body) throw new Error("No stream content");
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.replace('data: ', ''));
+
+                            if (data.type === 'START') {
+                                setBulkMapProgress(prev => ({ ...prev!, total: data.total }));
+                            } else if (data.type === 'PROGRESS') {
+                                setBulkMapProgress(prev => ({
+                                    ...prev!,
+                                    current: data.current,
+                                    total: data.total,
+                                    label: `Mapujem ${data.name}...`,
+                                    percentage: (data.current / (data.total || 1)) * 100
+                                }));
+                            } else if (data.type === 'DONE') {
+                                toast.success(`Hromadné mapovanie dokončené! Spracovaných ${data.count} šablón.`);
+                                setIsBulkMapping(false);
+                                fetchData();
+                            } else if (data.type === 'ERROR') {
+                                toast.error(data.error);
+                                setIsBulkMapping(false);
+                            }
+                        } catch (e) {
+                            console.error("Error parsing stream chunk", e);
+                        }
+                    }
+                }
+            }
+        } catch (e: any) {
+            console.error("Bulk map error:", e);
+            toast.error("Chyba hromadného mapovania.");
+            setIsBulkMapping(false);
+        }
+    };
 
     const handleDropboxSync = async () => {
         setIsSyncing(true);
@@ -704,608 +752,403 @@ export default function TemplatesPage() {
     };
 
     return (
-        <div>
-            <AppHeader title="Šablóny" />
+        <div className="min-h-screen bg-slate-50 pb-20">
+            <AppHeader title="Katalóg Šablón" />
 
-            {/* Sync Status Bar */}
-            <div className="flex items-center gap-6 mb-8 px-6 py-3 bg-white border border-slate-100 rounded-2xl shadow-sm text-[11px] font-bold uppercase tracking-wider">
-                <div className="flex items-center gap-2 text-slate-400">
-                    <Clock size={14} />
-                    <span>Posledná synchronizácia:</span>
-                    <span className="text-slate-900">
-                        {lastSync ? new Date(lastSync.date).toLocaleString('sk-SK') : 'Nikdy'}
-                    </span>
-                </div>
-                {aiProgress && (
-                    <div className="flex-1 max-w-xs mx-4">
-                        <ProgressBar
-                            progress={aiProgress.percentage}
-                            label={aiProgress.label}
-                            colorClass="bg-purple-600"
-                        />
+            <div className="max-w-7xl mx-auto px-6 py-8">
+                {/* Global Status Bar */}
+                <div className="flex items-center gap-6 mb-8 bg-white p-4 rounded-3xl border border-slate-200 shadow-sm overflow-x-auto">
+                    <div className="flex items-center gap-3">
+                        <Clock size={16} className="text-slate-400" />
+                        <div className="flex flex-col">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">Posledná synchronizácia</span>
+                            <span className="text-xs font-bold text-slate-700 mt-1">{lastSync?.date ? new Date(lastSync.date).toLocaleString('sk-SK') : 'Nikdy'}</span>
+                        </div>
                     </div>
-                )}
-                {bulkMapProgress && (
-                    <div className="flex-1 max-w-sm mx-4">
-                        <ProgressBar
-                            progress={bulkMapProgress.percentage}
-                            label={bulkMapProgress.label}
-                            colorClass="bg-gradient-to-r from-blue-600 to-purple-600"
-                        />
-                    </div>
-                )}
-                <div className="h-4 w-[1px] bg-slate-100" />
-                <div className="flex items-center gap-2">
-                    {lastSync?.status === 'OK' ? (
-                        <>
-                            <CheckCircle2 size={14} className="text-green-500" />
-                            <span className="text-green-600">Stav: OK</span>
-                        </>
-                    ) : (
-                        <>
-                            <CheckCircle2 size={14} className="text-slate-400" />
-                            <span className="text-slate-500">Pripravené</span>
-                        </>
-                    )}
-                </div>
-            </div>
-
-            {/* Tabs & Controls */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-
-                {/* Tabs */}
-                <div className="flex bg-slate-100 p-1 rounded-xl">
-                    <button
-                        onClick={() => setActiveTab('TEMPLATES')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'TEMPLATES'
-                            ? 'bg-white text-blue-600 shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                    >
-                        <Layers size={16} />
-                        Aktívne Šablóny
-                        <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] ml-1">
-                            {templates.length}
-                        </span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('INBOX')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'INBOX'
-                            ? 'bg-white text-blue-600 shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                    >
-                        <Inbox size={16} />
-                        Inbox Súborov
-                        {inboxItems.length > 0 && (
-                            <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[10px] ml-1 animate-pulse">
-                                {inboxItems.length}
-                            </span>
-                        )}
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('MATCH')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'MATCH'
-                            ? 'bg-white text-blue-600 shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                    >
-                        <Sparkles size={16} />
-                        Párovanie s E-shopom
-                    </button>
-                </div>
-
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    {activeTab === 'INBOX' && (
-                        <>
-                            {selectedItems.size > 0 ? (
-                                <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-right-1 tracking-tighter">
-                                    <span className="text-xs font-black text-blue-700 uppercase mr-2">{selectedItems.size} vybraných:</span>
-                                    <button
-                                        onClick={() => handleBulkClassify('TEMPLATE')}
-                                        disabled={isBulkClassifying}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-green-700 transition-all shadow-md active:scale-95"
-                                    >
-                                        <Layers size={12} />
-                                        Šablóna
-                                    </button>
-                                    <button
-                                        onClick={() => handleBulkClassify('IGNORE')}
-                                        disabled={isBulkClassifying}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase hover:bg-red-600 transition-all shadow-md active:scale-95"
-                                    >
-                                        <Trash2 size={12} />
-                                        Ignorovať
-                                    </button>
-                                    <div className="w-[1px] h-4 bg-blue-200 mx-1" />
-                                    <button
-                                        onClick={() => setSelectedItems(new Set())}
-                                        className="text-[10px] font-black text-blue-500 hover:text-blue-700 uppercase"
-                                    >
-                                        Zrušiť
-                                    </button>
-                                </div>
-                            ) : (
-                                <>
-                                    {aiProgress ? (
-                                        <div className="w-full flex-grow md:w-96 min-w-[300px] animate-in slide-in-from-left-4">
-                                            <ProgressBar
-                                                progress={aiProgress.percentage}
-                                                label={aiProgress.label}
-                                                className="w-full"
-                                                showPercentage={true}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <button
-                                                onClick={async () => {
-                                                    toast.promise(
-                                                        fetch('/api/inbox/aggregate', { method: 'POST' }).then(r => r.json()),
-                                                        {
-                                                            loading: 'Analyzujem a zlučujem súbory...',
-                                                            success: (data) => {
-                                                                fetchData();
-                                                                return data.message;
-                                                            },
-                                                            error: 'Chyba pri agregácii'
-                                                        }
-                                                    );
-                                                }}
-                                                disabled={inboxItems.length === 0}
-                                                className="flex items-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
-                                            >
-                                                <Layers size={16} />
-                                                <span>Auto-Mapping</span>
-                                            </button>
-
-                                            <button
-                                                onClick={runAiAnalysis}
-                                                disabled={isAnalyzing || inboxItems.length === 0}
-                                                className={`flex items-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-2xl text-sm font-bold hover:bg-purple-700 transition-all shadow-xl shadow-purple-200 ${isAnalyzing ? 'opacity-70' : ''}`}
-                                            >
-                                                {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-                                                <span>AI Triedenie</span>
-                                            </button>
-
-                                            {inboxItems.some((item: any) => item.prediction?.category === 'TEMPLATE' && item.status === 'UNCLASSIFIED') && (
-                                                <button
-                                                    onClick={handleBulkApproveAI}
-                                                    disabled={isBulkApproving}
-                                                    className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-2xl text-sm font-black uppercase tracking-tight hover:bg-green-700 transition-all shadow-xl shadow-green-200 animate-in zoom-in-50 duration-300"
-                                                >
-                                                    <Zap size={16} className="fill-white" />
-                                                    <span>Schváliť a presunúť AI šablóny</span>
-                                                </button>
-                                            )}
-                                        </>
-                                    )}
-                                </>
+                    {(isBulkMapping || isSyncing || isAnalyzing || isMatching) && (
+                        <div className="flex-grow min-w-[200px]">
+                            {isBulkMapping && bulkMapProgress && (
+                                <ProgressBar
+                                    progress={bulkMapProgress.percentage}
+                                    label={bulkMapProgress.label || "Hromadné mapovanie..."}
+                                    className="w-full"
+                                    colorClass="bg-gradient-to-r from-purple-600 to-indigo-600"
+                                />
                             )}
-                        </>
+                            {isSyncing && syncProgress && (
+                                <ProgressBar
+                                    progress={syncProgress.percentage}
+                                    label={syncProgress.label || "Synchronizujem..."}
+                                    className="w-full"
+                                    colorClass="bg-blue-600"
+                                />
+                            )}
+                            {isAnalyzing && aiProgress && (
+                                <ProgressBar
+                                    progress={aiProgress.percentage}
+                                    label={aiProgress.label || "AI analýza..."}
+                                    className="w-full"
+                                    colorClass="bg-purple-600"
+                                />
+                            )}
+                            {isMatching && matchProgress && (
+                                <ProgressBar
+                                    progress={matchProgress.percentage}
+                                    label={matchProgress.label || "Párovanie..."}
+                                    className="w-full"
+                                    colorClass="bg-indigo-600"
+                                />
+                            )}
+                        </div>
                     )}
+                    <div className="h-4 w-[1px] bg-slate-100 shrink-0" />
+                    <div className="flex items-center gap-2 shrink-0">
+                        {lastSync?.status === 'OK' ? (
+                            <>
+                                <CheckCircle2 size={14} className="text-green-500" />
+                                <span className="text-green-600 text-xs font-bold uppercase tracking-widest">Stav: OK</span>
+                            </>
+                        ) : (
+                            <>
+                                <Clock size={14} className="text-slate-400" />
+                                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Pripravené</span>
+                            </>
+                        )}
+                    </div>
                 </div>
 
-                <div className="flex flex-col w-full md:w-64 gap-2">
-                    <button
-                        onClick={handleDropboxSync}
-                        disabled={isSyncing}
-                        className={`flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-sm font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 ${isSyncing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                        {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-                        <span>{isSyncing ? 'Skenujem...' : 'Skenovať Dropbox'}</span>
-                    </button>
-                    {isSyncing && syncProgress && (
-                        <ProgressBar
-                            progress={syncProgress.percentage}
-                            label={syncProgress.label}
-                            className="w-full mt-2"
-                            showPercentage={true}
-                        />
-                    )}
-                </div>
-            </div>
-
-            {/* Content Area */}
-            {activeTab === 'TEMPLATES' && (
-                <div className="space-y-6">
-                    <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto">
+                {/* Tabs & Controls Header */}
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
+                    {/* Tabs */}
+                    <div className="flex bg-slate-100 p-1 rounded-2xl shrink-0">
                         <button
-                            onClick={handleBulkMapping}
-                            disabled={isBulkMapping}
-                            className={`px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm border ${isBulkMapping
-                                ? 'bg-purple-50 text-purple-400 border-purple-100 cursor-not-allowed'
-                                : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50 hover:border-purple-300'
-                                }`}
+                            onClick={() => setActiveTab('TEMPLATES')}
+                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'TEMPLATES' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
-                            <Sparkles size={16} className={isBulkMapping ? 'animate-pulse text-purple-500' : ''} />
-                            <span className="whitespace-nowrap">{isBulkMapping ? 'AI pracuje...' : 'Hromadný AI Map'}</span>
+                            <Layers size={18} />
+                            <span>Šablóny</span>
+                            <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-lg text-[10px] ml-1">{templates.length}</span>
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('INBOX')}
+                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'INBOX' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <Inbox size={18} />
+                            <span>Inbox</span>
+                            {inboxItems.length > 0 && (
+                                <span className="bg-red-500 text-white px-2 py-0.5 rounded-lg text-[10px] ml-1 animate-pulse">{inboxItems.length}</span>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('MATCH')}
+                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'MATCH' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <Sparkles size={18} />
+                            <span>Párovanie</span>
                         </button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {isLoading ? (
-                            Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="bg-white rounded-3xl border border-slate-100 p-6 h-64 animate-pulse">
-                                    <div className="w-full h-32 bg-slate-50 rounded-2xl mb-4" />
-                                    <div className="w-24 h-6 bg-slate-50 rounded-lg mb-2" />
-                                </div>
-                            ))
-                        ) : templates.length === 0 ? (
-                            <div className="col-span-full py-20 text-center">
-                                <Layers size={48} className="mx-auto text-slate-200 mb-4" />
-                                <h3 className="text-lg font-bold text-slate-400">Žiadne aktívne šablóny</h3>
-                                <p className="text-sm text-slate-400">Skontrolujte Inbox a pridajte nové šablóny.</p>
-                            </div>
-                        ) : (
-                            templates.map((template: Template) => (
-                                <Link href={`/templates/${encodeURIComponent(template.key)}`} key={template.key}>
-                                    <div className={`cursor-pointer bg-white rounded-3xl border transition-all group flex flex-col h-full overflow-hidden ${template.isVerified ? 'border-green-200 shadow-green-100 ring-1 ring-green-100 shadow-sm' : 'border-slate-100 shadow-sm hover:shadow-md'}`}>
-                                        {/* Thumbnail */}
-                                        <div className="h-48 bg-slate-50 w-full relative border-b border-slate-100">
-                                            {template.imageUrl ? (
-                                                // eslint-disable-next-line @next/next/no-img-element
-                                                <img src={template.imageUrl} alt={template.name} className="w-full h-full object-cover" />
-                                            ) : (template as any)._inboxPath ? (
-                                                <ThumbnailViewer path={(template as any)._inboxPath} extension={(template as any)._inboxExt} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                                    <ImageIcon size={32} strokeWidth={1} />
-                                                </div>
-                                            )}
-                                            {template.isVerified && (
-                                                <div className="absolute top-3 right-3 px-3 py-1.5 bg-green-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg flex items-center gap-1.5 z-10">
-                                                    <CheckCircle2 size={12} />
-                                                    Overená
-                                                </div>
-                                            )}
-                                            {/* SKU & Key Badges on Thumbnail */}
-                                            <div className="absolute bottom-3 left-3 flex flex-col gap-1.5 z-10">
-                                                {template.sku && (
-                                                    <span className="text-[10px] font-black text-white bg-purple-600/90 backdrop-blur-sm px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-lg border border-white/20">
-                                                        SKU: {template.sku}
-                                                    </span>
-                                                )}
-                                                <span className="text-[9px] font-black text-white bg-slate-900/60 backdrop-blur-sm px-2 py-0.5 rounded-md uppercase tracking-widest border border-white/10">
-                                                    Kľúč: {template.key}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="p-6 flex flex-col flex-1">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className={`p-2 rounded-xl transition-colors ${template.isVerified ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
-                                                    <Layers size={18} />
-                                                </div>
-                                                <button className="p-2 text-slate-400 hover:text-slate-600">
-                                                    <MoreHorizontal size={20} />
-                                                </button>
-                                            </div>
-                                            <div className="flex items-baseline justify-between mb-1">
-                                                <h3 className="text-lg font-black text-slate-900 truncate pr-2" title={template.alias || template.name || template.key}>
-                                                    {template.alias || template.name || template.key}
-                                                </h3>
-                                            </div>
-                                            {/* If it has variants, we can show a small badge */}
-                                            <div className="flex items-center justify-between mb-6">
-                                                <p className="text-xs font-medium text-slate-500 line-clamp-1 truncate w-full pr-2">
-                                                    {template.alias ? template.name : "Originál"}
-                                                </p>
-                                                {template.variants && template.variants.length > 0 && (
-                                                    <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded uppercase shrink-0">
-                                                        +{template.variants.length}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center justify-between pt-4 border-t border-slate-50 mt-auto">
-                                                <div className="flex items-center gap-2">
-                                                    <FolderOpen size={14} className="text-slate-400" />
-                                                    <span className="text-[10px] font-bold text-slate-500">{template.mappedPaths} polí</span>
-                                                </div>
-                                                <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${template.status === 'ACTIVE' ? 'bg-green-50 text-green-600' :
-                                                    template.status === 'NEEDS_REVIEW' ? 'bg-amber-50 text-amber-600' :
-                                                        template.status === 'WARNING_NO_PDF' ? 'bg-red-100 text-red-700 animate-pulse border border-red-200' :
-                                                            'bg-red-50 text-red-600'
-                                                    }`}>
-                                                    {template.status === 'ACTIVE' ? 'Aktívna' :
-                                                        template.status === 'NEEDS_REVIEW' ? 'Zdieľaná (Kontrola)' :
-                                                            template.status === 'WARNING_NO_PDF' ? 'Chyba PDF (.ai)' :
-                                                                'Chyba'}
-                                                </span>
-                                            </div>
-                                        </div>
+
+                    {/* Context Actions */}
+                    <div className="flex items-center gap-3 w-full lg:w-auto">
+                        {activeTab === 'TEMPLATES' && (
+                            <div className="flex items-center gap-4 w-full justify-end">
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-xl border border-slate-200 shadow-sm shrink-0">
+                                    <div className="flex items-center gap-1.5 min-w-[40px]">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${templates.filter(t => t.status === 'ACTIVE').length > 0 ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-green-100'}`}></div>
+                                        <span className="text-[10px] font-black text-slate-700">{templates.filter(t => t.status === 'ACTIVE').length}</span>
                                     </div>
-                                </Link>
-                            ))
+                                    <div className="w-[1px] h-3 bg-slate-200" />
+                                    <div className="flex items-center gap-1.5 min-w-[40px]">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${templates.filter(t => t.status === 'NEEDS_REVIEW').length > 0 ? 'bg-yellow-400' : 'bg-yellow-100'}`}></div>
+                                        <span className="text-[10px] font-black text-slate-700">{templates.filter(t => t.status === 'NEEDS_REVIEW').length}</span>
+                                    </div>
+                                    <div className="w-[1px] h-3 bg-slate-200" />
+                                    <div className="flex items-center gap-1.5 min-w-[40px]">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${templates.filter(t => t.status === 'PENDING_MAPPING' || !t.status).length > 0 ? 'bg-red-500' : 'bg-red-100'}`}></div>
+                                        <span className="text-[10px] font-black text-slate-700">{templates.filter(t => t.status === 'PENDING_MAPPING' || !t.status).length}</span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleBulkMapAI}
+                                    disabled={isBulkMapping}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl text-xs font-bold hover:scale-[1.02] transition-all shadow-lg shadow-purple-200 active:scale-[0.98] disabled:opacity-50"
+                                >
+                                    {isBulkMapping ? <RefreshCw size={16} className="animate-spin" /> : <Zap size={16} className="fill-white" />}
+                                    <span>Hromadné AI Mapovanie</span>
+                                </button>
+                            </div>
+                        )}
+
+                        {activeTab === 'INBOX' && (
+                            <div className="flex items-center gap-3 w-full justify-end">
+                                {selectedItems.size > 0 && (
+                                    <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-right-1">
+                                        <span className="text-[10px] font-black text-blue-700 mr-2">{selectedItems.size} VYBRANÝCH</span>
+                                        <button onClick={() => handleBulkClassify('TEMPLATE')} className="px-3 py-1 bg-green-600 text-white rounded-lg text-[10px] font-bold hover:bg-green-700">Šablóna</button>
+                                        <button onClick={() => setSelectedItems(new Set())} className="text-[10px] font-bold text-blue-500 px-2">Zrušiť</button>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={handleDropboxSync}
+                                    disabled={isSyncing}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-xs font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 disabled:opacity-50"
+                                >
+                                    {isSyncing ? <RefreshCw size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                                    <span>Skenovať Dropbox</span>
+                                </button>
+                                <button
+                                    onClick={runAiAnalysis}
+                                    disabled={isAnalyzing || inboxItems.length === 0}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white rounded-2xl text-xs font-bold hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 disabled:opacity-50"
+                                >
+                                    {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                                    <span>AI Triedenie</span>
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
-            )}
 
-            {activeTab === 'INBOX' && (
-                /* INBOX TAB */
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-                    {/* Inbox Filters */}
-                    {inboxItems.length > 0 && (
-                        <div className="flex items-center gap-2 p-4 border-b border-slate-100 overflow-x-auto bg-slate-50/50">
-                            {[
-                                { id: 'ALL', label: 'Všetko' },
-                                { id: 'PSD', label: 'PSD Súbory' },
-                                { id: 'AI', label: 'Illustrator (AI)' },
-                                { id: 'IMAGES', label: 'Obrázky (PNG/JPG)' },
-                                { id: 'OTHER', label: 'Ostatné / Dokumenty' }
-                            ].map(filter => (
-                                <button
-                                    key={filter.id}
-                                    onClick={() => {
-                                        setInboxFilter(filter.id as any);
-                                        setSelectedItems(new Set()); // Reset selection on filter change
-                                    }}
-                                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${inboxFilter === filter.id
-                                        ? 'bg-blue-600 text-white shadow-md'
-                                        : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'
-                                        }`}
-                                >
-                                    {filter.label}
-                                </button>
-                            ))}
+                {/* Content Area */}
+                <div className="animate-in fade-in duration-700">
+                    {activeTab === 'TEMPLATES' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {isLoading ? (
+                                Array.from({ length: 8 }).map((_, i) => (
+                                    <div key={i} className="bg-white rounded-[32px] border border-slate-100 p-6 h-64 animate-pulse" />
+                                ))
+                            ) : templates.length === 0 ? (
+                                <div className="col-span-full py-32 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+                                    <Layers size={48} className="mx-auto text-slate-200 mb-4" />
+                                    <h3 className="text-xl font-bold text-slate-400">Žiadne aktívne šablóny</h3>
+                                    <p className="text-slate-400 mt-2">Pridajte súbory z Inboxu alebo spustite skenovanie Dropboxu.</p>
+                                </div>
+                            ) : (
+                                templates.map((template) => (
+                                    <Link href={`/templates/${encodeURIComponent(template.key)}`} key={template.id} className="group">
+                                        <div className={`cursor-pointer bg-white rounded-[32px] border transition-all flex flex-col h-full overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 ${template.isVerified ? 'border-green-200 ring-1 ring-green-100' : 'border-slate-100'}`}>
+                                            <div className="h-48 bg-slate-50 w-full relative border-b border-slate-100">
+                                                {template.imageUrl ? (
+                                                    <img src={template.imageUrl} alt={template.name} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-slate-200 group-hover:text-blue-200 transition-colors">
+                                                        <ImageIcon size={48} strokeWidth={1} />
+                                                    </div>
+                                                )}
+                                                {/* Badges */}
+                                                <div className="absolute top-4 right-4 flex flex-col gap-2">
+                                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-md bg-white/80 border text-[10px] font-black uppercase tracking-widest shadow-lg">
+                                                        <div className={`w-2 h-2 rounded-full ${template.status === 'ACTIVE' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' :
+                                                            (template.status === 'NEEDS_REVIEW' ? 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]')
+                                                            }`}></div>
+                                                        <span className="text-slate-700">{template.status || 'DRAFT'}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="absolute bottom-4 left-4 flex flex-col gap-1.5">
+                                                    {template.sku && (
+                                                        <span className="text-[10px] font-black text-white bg-purple-600/90 px-2.5 py-1 rounded-lg shadow-lg uppercase tracking-wider backdrop-blur-sm border border-white/20">{template.sku}</span>
+                                                    )}
+                                                    <span className="text-[11px] font-bold text-white bg-slate-900/60 px-2.5 py-1 rounded-lg backdrop-blur-md border border-white/10 uppercase tracking-widest">{template.key}</span>
+                                                </div>
+                                            </div>
+                                            <div className="p-6 flex-grow flex flex-col">
+                                                <h3 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-lg line-clamp-1">{template.displayName || template.name}</h3>
+                                                <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-50">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Mapovanie</span>
+                                                        <span className="text-xs font-bold text-slate-700">{template.mappedPaths || 0} polí</span>
+                                                    </div>
+                                                    <div className={`p-2 rounded-xl transition-all ${template.isVerified ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-300 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
+                                                        {template.isVerified ? <CheckCircle2 size={18} /> : <Layers size={18} />}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Link>
+                                ))
+                            )}
                         </div>
                     )}
 
-                    {filteredInboxItems.length === 0 ? (
-                        <div className="py-20 text-center">
-                            <Inbox size={48} className="mx-auto text-slate-200 mb-4" />
-                            <h3 className="text-lg font-bold text-slate-400">
-                                {inboxItems.length === 0 ? 'Inbox je prázdny' : 'Zvolenému filtru nevyhovujú žiadne súbory'}
-                            </h3>
-                            <p className="text-sm text-slate-400">Skúste spustiť "Skenovať Dropbox" pre načítanie nových súborov.</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                                    <tr>
-                                        <th className="px-6 py-4 w-10">
-                                            <input
-                                                type="checkbox"
-                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-                                                checked={filteredInboxItems.length > 0 && selectedItems.size === filteredInboxItems.length}
-                                                onChange={toggleSelectAll}
-                                            />
-                                        </th>
-                                        <th className="px-6 py-4">Súbor a Cesta</th>
-                                        <th className="px-6 py-4">AI Návrh</th>
-                                        <th className="px-6 py-4 text-right">Akcia</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50">
-                                    {Object.entries(groupedInbox).map(([groupKey, items]) => {
-                                        const isExpanded = expandedGroups[groupKey];
-                                        const hasMultiple = items.length > 1;
+                    {activeTab === 'INBOX' && (
+                        <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden min-h-[400px]">
+                            {inboxItems.length === 0 ? (
+                                <div className="py-32 text-center">
+                                    <Inbox size={48} className="mx-auto text-slate-200 mb-4" />
+                                    <h3 className="text-xl font-bold text-slate-400">Váš Inbox je prázdny</h3>
+                                    <p className="text-slate-400 mt-2">Spustite skenovanie Dropboxu pre načítanie nových súborov.</p>
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-slate-50 border-b border-slate-100">
+                                            <tr>
+                                                <th className="px-6 py-5 w-12 text-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="rounded-md border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                                                        checked={inboxItems.length > 0 && selectedItems.size === inboxItems.length}
+                                                        onChange={(e) => e.target.checked ? setSelectedItems(new Set(inboxItems.map(i => i.id))) : setSelectedItems(new Set())}
+                                                    />
+                                                </th>
+                                                <th className="px-6 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Súbor</th>
+                                                <th className="px-10 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Analýza</th>
+                                                <th className="px-6 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Akcie</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {inboxItems.map((item) => {
+                                                const isAiDoc = item.prediction?.category === 'DOCUMENT';
+                                                const isAiIgnore = item.prediction?.category === 'IGNORE';
 
-                                        return (
-                                            <Fragment key={groupKey}>
-                                                {/* Parent Group Row */}
-                                                {hasMultiple && (
-                                                    <tr className="bg-slate-50/50 border-b border-slate-100/50 hover:bg-slate-50 cursor-pointer" onClick={() => toggleGroup(groupKey)}>
-                                                        <td colSpan={3} className="px-6 py-3">
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="p-1.5 text-slate-400 bg-white shadow-sm rounded-md">
-                                                                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                                                    </div>
-                                                                    <span className="font-bold text-slate-700 text-sm">Spojené dokumenty a návrhy: {groupKey}</span>
-                                                                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 font-bold rounded-full text-[10px] ml-2">
-                                                                        {items.length} súborov
-                                                                    </span>
+                                                return (
+                                                    <tr key={item.id} className={`hover:bg-slate-50 transition-colors group ${selectedItems.has(item.id) ? 'bg-blue-50/50' : ''}`}>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="rounded-md border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                                                                checked={selectedItems.has(item.id)}
+                                                                onChange={() => toggleSelectItem(item.id)}
+                                                            />
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-4">
+                                                                <ThumbnailViewer path={item.path} extension={item.extension} />
+                                                                <div className="flex flex-col min-w-0">
+                                                                    <span className="font-bold text-slate-900 text-sm truncate max-w-md">{item.name}</span>
+                                                                    <span className="text-[10px] text-slate-400 font-mono mt-1 opacity-60 truncate">{item.path}</span>
                                                                 </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-10 py-4">
+                                                            {item.prediction ? (
+                                                                <div className="flex flex-col gap-1">
+                                                                    <span className={`self-start px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${item.prediction.category === 'TEMPLATE' ? 'bg-green-100 text-green-700' :
+                                                                        item.prediction.category === 'DOCUMENT' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                                                                        }`}>
+                                                                        {item.prediction.category}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-slate-400 italic max-w-sm">{item.prediction.reasoning}</span>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-slate-300 text-xs italic">Čaká na analýzu...</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
                                                                 <button
-                                                                    onClick={(e) => { e.stopPropagation(); toast.info("Generovanie Multi-šablóny pridané čoskoro..."); }}
-                                                                    className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-sm"
+                                                                    onClick={() => handleClassify(item.id, 'TEMPLATE')}
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-600 rounded-xl text-[10px] font-bold hover:bg-green-600 hover:text-white transition-all"
                                                                 >
-                                                                    Zlúčiť ako šablónu
+                                                                    <CheckCircle2 size={14} />
+                                                                    Schváliť
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleClassify(item.id, 'DOCUMENT')}
+                                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isAiDoc ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}
+                                                                >
+                                                                    <FileText size={14} />
+                                                                    Dokument
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleClassify(item.id, 'IGNORE')}
+                                                                    className={`p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all ${isAiIgnore ? 'text-red-500 bg-red-50' : ''}`}
+                                                                    title="Ignorovať"
+                                                                >
+                                                                    <Trash2 size={18} />
                                                                 </button>
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                )}
-
-                                                {/* Children Rows */}
-                                                {(hasMultiple ? isExpanded : true) && items.map((item) => {
-                                                    const isAiTemplate = item.prediction?.category === 'TEMPLATE';
-                                                    const isAiDoc = item.prediction?.category === 'DOCUMENT';
-                                                    const isAiIgnore = item.prediction?.category === 'IGNORE';
-
-                                                    return (
-                                                        <tr key={item.id} className={`hover:bg-blue-50/30 transition-colors group ${hasMultiple ? 'bg-white' : ''} ${selectedItems.has(item.id) ? 'bg-blue-50/50' : ''}`}>
-                                                            <td className="px-6 py-4">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-                                                                    checked={selectedItems.has(item.id)}
-                                                                    onChange={() => toggleSelectItem(item.id)}
-                                                                />
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="flex items-center gap-3">
-                                                                    {/* Use Thumbnail Viewer instead of icon */}
-                                                                    <ThumbnailViewer path={item.path} extension={item.extension} />
-
-                                                                    <div className="min-w-0">
-                                                                        <div className="font-bold text-slate-900 text-sm truncate max-w-[400px]" title={item.name}>{item.name}</div>
-                                                                        <div className="text-[10px] text-slate-500 font-mono mt-1 flex items-center gap-1.5 bg-slate-100/50 px-2 py-1 rounded inline-flex border border-slate-200/50 hover:bg-slate-100 transition-colors" title={item.path}>
-                                                                            <FolderOpen size={10} className="text-slate-400 shrink-0" />
-                                                                            <span className="truncate">{item.path.replace(`/${item.name}`, '') || '/'}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                {item.prediction ? (
-                                                                    <div className="flex flex-col gap-1">
-                                                                        <span className={`self-start px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${isAiTemplate ? 'bg-green-100 text-green-700' :
-                                                                            isAiDoc ? 'bg-blue-100 text-blue-700' :
-                                                                                'bg-slate-100 text-slate-600'
-                                                                            }`}>
-                                                                            {item.prediction.category}
-                                                                        </span>
-                                                                        <span className="text-[10px] text-slate-400 italic">
-                                                                            {item.prediction.reasoning}
-                                                                        </span>
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="text-slate-300 text-xs italic">Čaká na analýzu...</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                                                                    <button
-                                                                        onClick={() => handleClassify(item.id, 'TEMPLATE')}
-                                                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isAiTemplate ? 'bg-green-600 text-white border-green-600 shadow-md transform scale-105' : 'bg-white text-slate-600 border-slate-200 hover:border-green-300 hover:text-green-600'}`}
-                                                                    >
-                                                                        <Layers size={14} />
-                                                                        Šablóna
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleClassify(item.id, 'DOCUMENT')}
-                                                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isAiDoc ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'}`}
-                                                                    >
-                                                                        <FileText size={14} />
-                                                                        Dokument
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleClassify(item.id, 'IGNORE')}
-                                                                        className={`p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all ${isAiIgnore ? 'text-red-500 bg-red-50' : ''}`}
-                                                                        title="Ignorovať"
-                                                                    >
-                                                                        <Trash2 size={16} />
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </Fragment>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
                     )}
-                </div>
-            )}
 
-            {activeTab === 'MATCH' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-                        <div>
-                            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                                <Sparkles className="text-purple-500" />
-                                Smart Match: Produkty a Šablóny
-                            </h2>
-                            <p className="text-sm text-slate-500 mt-1">
-                                Spárujte WooCommerce produkty s grafickými šablónami, aby systém vedel, čo generovať.
-                            </p>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                            <button
-                                onClick={async () => {
-                                    setIsMatching(true);
-                                    setMatchProgress({ percentage: 0, label: 'Začínam párovanie...' });
-                                    try {
-                                        const res = await fetch('/api/templates/match-products', { method: 'POST' });
-                                        if (!res.body) throw new Error("Server nevrátil odpoveď.");
-
-                                        const reader = res.body.getReader();
-                                        const decoder = new TextDecoder();
-                                        let buffer = '';
-
-                                        while (true) {
-                                            const { done, value } = await reader.read();
-                                            if (done) break;
-
-                                            buffer += decoder.decode(value, { stream: true });
-                                            const lines = buffer.split('\n');
-                                            buffer = lines.pop() || ''; // Posledný neukončený riadok si necháme
-
-                                            for (const line of lines) {
-                                                if (line.trim()) {
-                                                    try {
+                    {activeTab === 'MATCH' && (
+                        <div className="space-y-6">
+                            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
+                                <div className="flex items-center gap-6">
+                                    <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                                        <Sparkles size={32} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-black text-slate-900 font-display tracking-tight">AI Matching Produktov</h2>
+                                        <p className="text-slate-500 mt-1">Automaticky prepojíme grafické šablóny s vašimi produktmi na e-shope.</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        setIsMatching(true);
+                                        setMatchProgress({ percentage: 0, label: 'Začínam párovanie...' });
+                                        try {
+                                            const res = await fetch('/api/templates/match-products', { method: 'POST' });
+                                            if (!res.body) throw new Error("No stream content");
+                                            const reader = res.body.getReader();
+                                            const decoder = new TextDecoder();
+                                            let buffer = '';
+                                            while (true) {
+                                                const { done, value } = await reader.read();
+                                                if (done) break;
+                                                buffer += decoder.decode(value, { stream: true });
+                                                const lines = buffer.split('\n');
+                                                buffer = lines.pop() || '';
+                                                for (const line of lines) {
+                                                    if (line.trim()) {
                                                         const event = JSON.parse(line);
-                                                        if (event.type === 'progress') {
-                                                            setMatchProgress({ percentage: event.percentage, label: event.message });
-                                                        } else if (event.type === 'match') {
-                                                            // Update konkrétneho riadku v reálnom čase!
-                                                            setWebProducts(current =>
-                                                                current.map(p => p.id === event.product.id ? event.product : p)
-                                                            );
-                                                        } else if (event.type === 'done') {
-                                                            toast.success(`Spárované (Presné: ${event.exactMatches}, AI: ${event.semanticMatches})`);
-                                                        } else if (event.type === 'error') {
-                                                            toast.error(`Chyba: ${event.message}`);
-                                                        }
-                                                    } catch (err) {
-                                                        // Ignorujeme chyby parsovania chunkov
+                                                        if (event.type === 'progress') setMatchProgress({ percentage: event.percentage, label: event.message });
+                                                        else if (event.type === 'done') toast.success(`Párovanie dokončené!`);
                                                     }
                                                 }
                                             }
+                                            fetchData();
+                                        } catch (e) {
+                                            toast.error("Zlyhanie párovania.");
+                                        } finally {
+                                            setIsMatching(false);
                                         }
-                                        fetchData(); // Na záver ešte raz pre istotu všetko refreshneme
-                                    } catch (e: any) {
-                                        toast.error("Chyba spojenia: " + e.message);
-                                    } finally {
-                                        setIsMatching(false);
-                                    }
-                                }}
-                                disabled={isMatching}
-                                className={`flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-2xl text-sm font-bold hover:bg-purple-700 transition-all shadow-xl shadow-purple-200 ${isMatching ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                                {isMatching ? <Loader2 className="animate-spin" size={16} /> : <Wand2 size={16} />}
-                                Spustiť Auto-Match
-                            </button>
-                            {isMatching && matchProgress && (
-                                <ProgressBar
-                                    progress={matchProgress?.percentage ?? 0}
-                                    label={matchProgress?.label ?? ''}
-                                    colorClass="bg-purple-500"
-                                />
-                            )}
-                        </div>
-                    </div>
+                                    }}
+                                    disabled={isMatching}
+                                    className="flex items-center gap-3 px-8 py-4 bg-slate-900 text-white rounded-[24px] font-bold hover:bg-black transition-all shadow-xl active:scale-95 disabled:opacity-50"
+                                >
+                                    {isMatching ? <Loader2 size={20} className="animate-spin" /> : <Zap size={20} className="fill-white" />}
+                                    <span>Spustiť AI Matcher</span>
+                                </button>
+                            </div>
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-slate-50/50">
-                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Názov Produktu</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">SKU</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Šablóna</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status / Istota</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {webProducts.map(wp => (
-                                    <ProductMatchRow
-                                        key={wp.id}
-                                        wp={wp}
-                                        templates={templates}
-                                        onUpdate={(updatedProduct) => {
-                                            setWebProducts(current =>
-                                                current.map(p => p.id === updatedProduct.id ? updatedProduct : p)
-                                            );
-                                        }}
-                                    />
-                                ))}
-                                {webProducts.length === 0 && (
-                                    <tr>
-                                        <td colSpan={4} className="text-center p-8 text-slate-500">
-                                            Zatiaľ neboli stiahnuté žiadne produkty z e-shopu. Použite sekciu Nastavenia.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                            <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-50 border-b border-slate-100">
+                                        <tr>
+                                            <th className="px-6 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">E-shop Produkt</th>
+                                            <th className="px-6 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">SKU</th>
+                                            <th className="px-6 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Priradená Šablóna</th>
+                                            <th className="px-6 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {webProducts.length > 0 ? (
+                                            webProducts.map((wp) => (
+                                                <ProductMatchRow key={wp.id} wp={wp} templates={templates} onUpdate={fetchData} />
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={4} className="text-center p-8 text-slate-500 italic">
+                                                    Zatiaľ neboli stiahnuté žiadne produkty z e-shopu. Použite sekciu Nastavenia.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
         </div>
     );
 }

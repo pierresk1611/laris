@@ -260,6 +260,19 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
         const toastId = toast.loading("Odosielam do tlače...");
 
         try {
+            // 1. Production Guard: Check for non-ACTIVE templates
+            const nonActiveItems = order.items.filter((item: any) => {
+                if (!item.templateKey) return false;
+                // If it has a template key but status is not ACTIVE or missing (legacy)
+                return item.templateStatus && item.templateStatus !== 'ACTIVE';
+            });
+
+            if (nonActiveItems.length > 0) {
+                const itemNames = nonActiveItems.map((i: any) => i.name).join(", ");
+                toast.error(`POZOR: Niektoré položky nemajú dokončené mapovanie (${itemNames}). Šablóna musí byť v stave AKTÍVNA.`, { id: toastId, duration: 5000 });
+                return;
+            }
+
             await handleSaveAll(); // Ensure latest data is saved
 
             const res = await fetch('/api/agent/jobs', {

@@ -29,7 +29,7 @@ model Template {
   displayName  String?  // Mirka's custom name (alias replacement)
   mappedPaths  Int      @default(0)
   mappingData  Json?    // Stores the PSD layer to field mappings
-  status       String   @default("ACTIVE")
+  status       String   @default("PENDING_MAPPING")
   isVerified   Boolean  @default(false)
   imageUrl     String?
   alias        String?  // Deprecated: Display Name / User customized alias
