@@ -22,7 +22,8 @@ import {
     ChevronDown,
     ChevronRight,
     Sparkles,
-    AlertCircle
+    AlertCircle,
+    Zap
 } from "lucide-react";
 import { toast } from "sonner";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -582,6 +583,55 @@ export default function TemplatesPage() {
         });
     };
 
+    const [isBulkApproving, setIsBulkApproving] = useState(false);
+
+    const handleBulkApproveAI = async () => {
+        setIsBulkApproving(true);
+        setAiProgress({ percentage: 0, label: 'Pripravujem hromadné schválenie...' });
+
+        try {
+            const res = await fetch('/api/inbox/bulk-approve', { method: 'POST' });
+            if (!res.body) throw new Error("Server nevrátil žiadne dáta.");
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.type === 'progress') {
+                            setAiProgress({ percentage: data.percentage, label: data.message });
+                        } else if (data.type === 'done') {
+                            toast.success(`Hromadné schválenie dokončené: ${data.processed} súborov.`);
+                        } else if (data.type === 'error') {
+                            toast.error(`Chyba: ${data.message}`);
+                        }
+                    } catch (e) {
+                        console.error("Error parsing stream line:", e);
+                    }
+                }
+            }
+
+            fetchData();
+        } catch (error: any) {
+            console.error("[BulkApprove] Frontend Error:", error);
+            toast.error(`Nepodarilo sa spustiť hromadné schválenie: ${error.message}`);
+        } finally {
+            setIsBulkApproving(false);
+            setTimeout(() => setAiProgress(null), 2000);
+        }
+    };
+
     const filteredInboxItems = useMemo(() => {
         if (inboxFilter === 'ALL') return inboxItems;
         return inboxItems.filter(item => {
@@ -817,6 +867,17 @@ export default function TemplatesPage() {
                                                 {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
                                                 <span>AI Triedenie</span>
                                             </button>
+
+                                            {inboxItems.some((item: any) => item.prediction?.category === 'TEMPLATE' && item.status === 'UNCLASSIFIED') && (
+                                                <button
+                                                    onClick={handleBulkApproveAI}
+                                                    disabled={isBulkApproving}
+                                                    className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-2xl text-sm font-black uppercase tracking-tight hover:bg-green-700 transition-all shadow-xl shadow-green-200 animate-in zoom-in-50 duration-300"
+                                                >
+                                                    <Zap size={16} className="fill-white" />
+                                                    <span>Schváliť a presunúť AI šablóny</span>
+                                                </button>
+                                            )}
                                         </>
                                     )}
                                 </>
