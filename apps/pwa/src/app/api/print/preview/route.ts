@@ -45,19 +45,28 @@ export async function POST(req: Request) {
         }
 
         // 1. Download PSD
-        let fileBuffer: Buffer | null = null;
+        let fileBuffer: Buffer | ArrayBuffer | null = null;
         let psdPath = `/TEMPLATES/${templateKey}.psd`;
 
+        const getBufferFromDbx = async (dbxPath: string) => {
+            const dbxResponse = await dbx.filesDownload({ path: dbxPath });
+            if ((dbxResponse.result as any).fileBinary) {
+                return (dbxResponse.result as any).fileBinary;
+            }
+            if ((dbxResponse.result as any).fileBlob) {
+                const blob = (dbxResponse.result as any).fileBlob;
+                return Buffer.from(await blob.arrayBuffer());
+            }
+            return null;
+        };
+
         try {
-            const dbxResponse = await dbx.filesDownload({ path: psdPath });
-            // Dropbox JS sdk returns fileBinary in Node
-            fileBuffer = (dbxResponse.result as any).fileBinary || (dbxResponse.result as any).fileBlob;
+            fileBuffer = await getBufferFromDbx(psdPath);
         } catch (err: any) {
             // Try psdt
             try {
                 psdPath = `/TEMPLATES/${templateKey}.psdt`;
-                const dbxResponse = await dbx.filesDownload({ path: psdPath });
-                fileBuffer = (dbxResponse.result as any).fileBinary || (dbxResponse.result as any).fileBlob;
+                fileBuffer = await getBufferFromDbx(psdPath);
             } catch (err2: any) {
                 // Return fallback error just in case it's an AI file not caught by search, or missing
                 return NextResponse.json({

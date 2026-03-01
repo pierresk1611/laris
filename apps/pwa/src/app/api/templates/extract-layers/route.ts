@@ -130,7 +130,13 @@ export async function POST(req: Request) {
 
         console.log(`[CloudExtract] Downloading ${variant.path}...`);
         const dbxResponse = await dbx.filesDownload({ path: variant.path });
-        const fileBuffer = (dbxResponse.result as any).fileBinary;
+
+        let fileBuffer = (dbxResponse.result as any).fileBinary;
+        if (!fileBuffer && (dbxResponse.result as any).fileBlob) {
+            console.log(`[CloudExtract] fileBinary missing, using fileBlob.arrayBuffer()...`);
+            const blob = (dbxResponse.result as any).fileBlob;
+            fileBuffer = Buffer.from(await blob.arrayBuffer());
+        }
 
         if (!fileBuffer) {
             return NextResponse.json({ success: false, error: 'Nepodarilo sa stiahnuť súbor z Dropboxu' }, { status: 500 });
