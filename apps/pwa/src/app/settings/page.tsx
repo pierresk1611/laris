@@ -16,7 +16,8 @@ import {
     FileText,
     UploadCloud,
     Loader2,
-    Printer
+    Printer,
+    Link2
 } from "lucide-react";
 
 interface Shop {
@@ -254,7 +255,7 @@ export default function SettingsPage() {
             <AppHeader title="Nastavenia Systému" />
 
             {/* Tab Navigation */}
-            <div className="flex gap-2 mb-8 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit">
+            <div className="flex flex-wrap gap-2 mb-8 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit">
                 <button
                     onClick={() => setActiveTab('shops')}
                     className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'shops' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}
@@ -285,10 +286,17 @@ export default function SettingsPage() {
                 </button>
                 <button
                     onClick={() => setActiveTab('print')}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'print' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}
+                    className={`flex flex-shrink-0 items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'print' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}
                 >
                     <Printer size={18} />
                     Tlač
+                </button>
+                <button
+                    onClick={() => window.location.href = '/settings/mapping'}
+                    className="flex flex-shrink-0 items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all text-slate-500 hover:bg-slate-100"
+                >
+                    <Link2 size={18} />
+                    Mapovanie SKU
                 </button>
             </div>
 
