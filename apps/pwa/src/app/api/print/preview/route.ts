@@ -20,7 +20,53 @@ export async function POST(req: Request) {
 
         const dbx = await getDropboxClient();
 
+        // ---- HELPER: Dropbox Thumbnail Fallback ----
+        const generateDropboxThumbnailFallback = async (sourcePath: string) => {
+            console.log(`[Preview] Generating fallback thumbnail from Dropbox for ${sourcePath}`);
+            const thumbRes = await dbx.filesGetThumbnailV2({
+                resource: { '.tag': 'path', path: sourcePath },
+                format: { '.tag': 'jpeg' },
+                size: { '.tag': 'w1024h768' }
+            });
+
+            let thumbBuffer = (thumbRes.result as any).fileBinary;
+            if (!thumbBuffer && (thumbRes.result as any).fileBlob) {
+                const blob = (thumbRes.result as any).fileBlob;
+                thumbBuffer = Buffer.from(await blob.arrayBuffer());
+            }
+
+            if (!thumbBuffer) throw new Error("Empty thumbnail buffer");
+
+            const previewFilename = `Preview_Order${orderId}_Item${itemId}_${Date.now()}.jpg`;
+            const previewDbxPath = `/AutoDesign_App/PREVIEWS/${previewFilename}`;
+
+            await dbx.filesUpload({
+                path: previewDbxPath,
+                contents: thumbBuffer,
+                mode: { '.tag': 'overwrite' }
+            });
+
+            let sharedLink = null;
+            try {
+                const linkRes = await dbx.sharingCreateSharedLinkWithSettings({
+                    path: previewDbxPath,
+                    settings: { requested_visibility: { '.tag': 'public' } }
+                });
+                sharedLink = linkRes.result.url.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '&raw=1');
+            } catch (linkErr: any) {
+                if (linkErr.error && linkErr.error['.tag'] === 'shared_link_already_exists') {
+                    const listRes = await dbx.sharingListSharedLinks({ path: previewDbxPath, direct_only: true });
+                    if (listRes.result.links && listRes.result.links.length > 0) {
+                        sharedLink = listRes.result.links[0].url.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '&raw=1');
+                    }
+                }
+            }
+            return sharedLink;
+        };
+
         // Check for .ai first (Optimistic check)
+        let isAiFile = false;
+        let aiPath = `/TEMPLATES/${templateKey}.ai`;
         try {
             const listRes = await dbx.filesSearchV2({
                 query: templateKey,
@@ -30,18 +76,26 @@ export async function POST(req: Request) {
                     file_extensions: ['ai']
                 }
             });
-            if (listRes.result.matches.some(m =>
+            const aiMatch = listRes.result.matches.find(m =>
                 m.metadata['.tag'] === 'metadata' &&
-                (m.metadata.metadata as any)?.name.toLowerCase() === `${templateKey.toLowerCase()}.ai`
-            )) {
-                return NextResponse.json({
-                    success: false,
-                    error: 'Náhľady pre Illustrator vyžadujú zapnutého Agenta',
-                    requiresAgent: true
-                });
+                (m.metadata as any).metadata?.name.toLowerCase() === `${templateKey.toLowerCase()}.ai`
+            );
+            if (aiMatch) {
+                isAiFile = true;
+                aiPath = (aiMatch.metadata as any).metadata.path_display || aiPath;
             }
         } catch (e) {
             console.warn("Dropbox AI search failed, but continuing:", e);
+        }
+
+        if (isAiFile) {
+            try {
+                const url = await generateDropboxThumbnailFallback(aiPath);
+                return NextResponse.json({ success: true, url, isFallback: true });
+            } catch (err: any) {
+                console.error("[Preview] AI Fallback failed:", err);
+                return NextResponse.json({ success: false, error: 'Nepodarilo sa stiahnuť AI náhľad: ' + err.message, requiresAgent: true });
+            }
         }
 
         // 1. Download PSD
@@ -86,14 +140,19 @@ export async function POST(req: Request) {
         try {
             psd = readPsd(fileBuffer);
         } catch (parseErr: any) {
-            if (parseErr.message && parseErr.message.includes('CMYK')) {
+            console.log(`[Preview] PSD Parse Error (CMYK/Unsupported): ${parseErr.message}`);
+            // Fallback to Dropbox thumbnail for CMYK
+            try {
+                const url = await generateDropboxThumbnailFallback(psdPath);
+                return NextResponse.json({ success: true, url, isFallback: true });
+            } catch (thumbErr: any) {
+                console.error("[Preview] CMYK Fallback failed:", thumbErr);
                 return NextResponse.json({
                     success: false,
-                    error: 'Šablóna je v CMYK formáte. Cloudový náhľad nie je možný, náhľad vygeneruje lokálny Agent.',
+                    error: 'Šablónu nie je možné renderovať (CMYK/Nepodporovaný formát) a náhľad z Dropboxu zlyhal.',
                     requiresAgent: true
                 });
             }
-            throw parseErr;
         }
 
         // 3. Map data to text layers

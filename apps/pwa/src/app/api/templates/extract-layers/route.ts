@@ -148,15 +148,11 @@ export async function POST(req: Request) {
             psd = readPsd(fileBuffer, {
                 skipLayerImageData: true,
                 skipCompositeImageData: true,
-                skipThumbnail: true
+                skipThumbnail: true,
+                throwForMissingFeatures: false
             });
         } catch (parseErr: any) {
-            if (parseErr.message && parseErr.message.includes('CMYK')) {
-                return NextResponse.json({
-                    success: false,
-                    error: 'PSD Súbor je v CMYK móde. Pre bleskové spracovanie v cloude ho preuložte v RGB móde, alebo počkajte na pripojenie Agenta.'
-                }, { status: 400 });
-            }
+            console.error(`[CloudExtract] ag-psd thrown error during metadata extraction:`, parseErr);
             throw parseErr;
         }
 
