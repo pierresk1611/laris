@@ -143,11 +143,22 @@ export async function POST(req: Request) {
         }
 
         console.log(`[CloudExtract] Parsing PSD...`);
-        const psd = readPsd(fileBuffer, {
-            skipLayerImageData: true,
-            skipCompositeImageData: true,
-            skipThumbnail: true
-        });
+        let psd;
+        try {
+            psd = readPsd(fileBuffer, {
+                skipLayerImageData: true,
+                skipCompositeImageData: true,
+                skipThumbnail: true
+            });
+        } catch (parseErr: any) {
+            if (parseErr.message && parseErr.message.includes('CMYK')) {
+                return NextResponse.json({
+                    success: false,
+                    error: 'PSD Súbor je v CMYK móde. Pre bleskové spracovanie v cloude ho preuložte v RGB móde, alebo počkajte na pripojenie Agenta.'
+                }, { status: 400 });
+            }
+            throw parseErr;
+        }
 
         const extractedLayers = psd.children ? extractLayersRecursive(psd.children) : [];
 

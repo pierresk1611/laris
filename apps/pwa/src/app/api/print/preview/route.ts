@@ -82,7 +82,19 @@ export async function POST(req: Request) {
         }
 
         // 2. Parse PSD
-        const psd = readPsd(fileBuffer);
+        let psd;
+        try {
+            psd = readPsd(fileBuffer);
+        } catch (parseErr: any) {
+            if (parseErr.message && parseErr.message.includes('CMYK')) {
+                return NextResponse.json({
+                    success: false,
+                    error: 'Šablóna je v CMYK formáte. Cloudový náhľad nie je možný, náhľad vygeneruje lokálny Agent.',
+                    requiresAgent: true
+                });
+            }
+            throw parseErr;
+        }
 
         // 3. Map data to text layers
         const traverseAndReplace = (node: any) => {
