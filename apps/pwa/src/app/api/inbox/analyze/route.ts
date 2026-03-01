@@ -64,22 +64,24 @@ export async function POST(req: Request) {
         const predictions = JSON.parse(content);
 
         // 4. Save predictions to DB (update FileInbox items)
-        const updates = [];
+        let successCount = 0;
         for (const item of items) {
-            const pred = predictions[item.name];
+            const pred = predictions[item.name] || predictions[item.id]; // fallback
             if (pred) {
-                // @ts-ignore
-                const update = prisma.fileInbox.update({
-                    where: { id: item.id },
-                    data: {
-                        prediction: pred
-                    }
-                });
-                updates.push(update);
+                try {
+                    // @ts-ignore
+                    await prisma.fileInbox.update({
+                        where: { id: item.id },
+                        data: {
+                            prediction: pred
+                        }
+                    });
+                    successCount++;
+                } catch (updateErr) {
+                    console.warn(`[InboxAnalyze] Skipping update for ${item.id} - not found or locked.`);
+                }
             }
         }
-
-        await prisma.$transaction(updates);
 
         return NextResponse.json({ success: true, predictions });
 
