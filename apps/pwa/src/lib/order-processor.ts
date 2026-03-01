@@ -159,34 +159,9 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         templateInfo = skuMap.get(itemSku) || null;
                     }
 
-                    // D) Extraction: Try to pull a code (PNP01, 2022_5) from the item name
+                    // D) Extraction: Regex fallback removed to enforce 100% strict matching.
+                    // If A, B, or C didn't find an exact match, the item remains unmapped.
                     let templateKey = templateInfo ? templateInfo.key : null;
-
-                    if (!templateInfo) {
-                        templateKey = extractTemplateKey(item.name || "", (item.sku || "").toString());
-                        if (templateKey) {
-                            // The extractor can return codes with or without spaces depending on regex.
-                            // We normalize the extracted key and template keys for comparison.
-                            const normalizedExtracted = templateKey.toUpperCase().replace(/\s+/g, '');
-
-                            // First try exact map (retro compatibility)
-                            templateInfo = templateMap.get(templateKey.toUpperCase()) || null;
-
-                            // If not found in exact map, search all normalized keys
-                            if (!templateInfo) {
-                                const foundTemplate = templates.find((t: any) => t.key.toUpperCase().replace(/\s+/g, '') === normalizedExtracted);
-                                if (foundTemplate) {
-                                    templateInfo = {
-                                        id: foundTemplate.id,
-                                        isVerified: foundTemplate.isVerified,
-                                        key: foundTemplate.key,
-                                        status: foundTemplate.status
-                                    };
-                                    templateKey = foundTemplate.key;
-                                }
-                            }
-                        }
-                    }
 
                     // The original change had a redeclaration of templateInfo here.
                     // Instead, we ensure the existing templateInfo variable is correctly typed and populated.

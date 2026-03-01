@@ -114,46 +114,14 @@ export async function POST(req: Request) {
                     }
                 }
 
-                // RULE 2: TITLE CODE EXTRACTION (Regex)
-                if (remainingToAI.length > 0) {
-                    await updateProgress('AI_MATCH_PROGRESS', 30, 100, `Pravidlo 2: Hľadám kód v názve produktu (${remainingToAI.length})`);
-                    sendEvent({ type: 'progress', message: `Pravidlo 2: Hľadám kód v názve produktu (${remainingToAI.length})...`, percentage: 30 });
+                // RULE 2 has been completely removed to enforce 100% strict matching.
+                // Products that did not match by exact SKU/Key in Priority 1 will simply remain unmapped (NENAPÁROVANÉ)
+                // and must be linked manually by the operator via the Searchable Select UI.
 
-                    // Common code patterns: JSO 15, PNP01, 2022_5, MOD2025_17, OZN-01
-                    const regex = /([A-Z]{2,4}\s?\d{1,3}|[A-Z0-9]{3,8}_\d{1,3}|[A-Z]{3,5}-\d{1,3})/i;
-
-                    for (let i = 0; i < remainingToAI.length; i++) {
-                        const product = remainingToAI[i];
-                        const match = String(product.title).match(regex);
-
-                        if (match && match[1]) {
-                            const extractedCode = match[1].toUpperCase().replace(/\s+/g, ''); // Normalize by removing spaces: JSO 15 -> JSO15
-
-                            // Find template by this code (checking normalized keys)
-                            const matchedTemplate = templates.find(t =>
-                                t.key.toUpperCase().replace(/\s+/g, '') === extractedCode ||
-                                t.sku?.toUpperCase().replace(/\s+/g, '') === extractedCode
-                            );
-
-                            if (matchedTemplate) {
-                                const updated = await prisma.webProduct.update({
-                                    where: { id: product.id },
-                                    data: {
-                                        templateId: matchedTemplate.id,
-                                        matchConfidence: 0.99 // AI Suggestion (Requires manual confirm)
-                                    },
-                                    include: { template: { include: { files: { where: { type: 'MAIN' } } } } }
-                                });
-                                semanticMatches++;
-                                sendEvent({ type: 'match', product: updated });
-                            }
-                        }
-                    }
-                }
-
-                await updateProgress('AI_MATCH_PROGRESS', 100, 100, `Párovanie dokončené. (Overené: ${exactMatches}, Návrhy: ${semanticMatches})`, 'COMPLETED');
-                sendEvent({ type: 'progress', message: `Hotovo! Overené: ${exactMatches}, Návrhy z názvu: ${semanticMatches}`, percentage: 100 });
-                sendEvent({ type: 'done', exactMatches, semanticMatches, totalMapped: exactMatches + semanticMatches });
+                // Send progress update based only on exact matches
+                await updateProgress('AI_MATCH_PROGRESS', 100, 100, `Párovanie dokončené. (Overené: ${exactMatches}, Nenapárované: ${remainingToAI.length})`, 'COMPLETED');
+                sendEvent({ type: 'progress', message: `Hotovo! Overené: ${exactMatches}, Nenapárované: ${remainingToAI.length}`, percentage: 100 });
+                sendEvent({ type: 'done', exactMatches, semanticMatches: 0, totalMapped: exactMatches });
 
                 controller.close();
             } catch (error: any) {
