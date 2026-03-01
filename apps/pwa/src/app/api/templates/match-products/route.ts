@@ -92,21 +92,6 @@ export async function POST(req: Request) {
                         matchedTemplate = templates.find(t => t.key.toLowerCase() === product.sku?.toLowerCase());
                     }
 
-                    // 3. Check if Template Key is inside the Title (Regex)
-                    if (!matchedTemplate) {
-                        const title = product.title.toLowerCase();
-                        for (const t of sortedTemplates) {
-                            const key = t.key.toLowerCase();
-                            // Look for the key as a whole word/part of code
-                            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                            const regex = new RegExp(`\\b${escapedKey}\\b`, 'i');
-                            if (regex.test(title)) {
-                                matchedTemplate = t;
-                                break;
-                            }
-                        }
-                    }
-
                     if (matchedTemplate) {
                         const updated = await prisma.webProduct.update({
                             where: { id: product.id },

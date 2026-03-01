@@ -154,12 +154,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         templateInfo = webProductSkuMap.get(itemSku) as any;
                     }
 
-                    // B) Try WebProduct Title map (Exact Title match from shop)
-                    if (!templateInfo && itemNameFiltered) {
-                        templateInfo = webProductTitleMap.get(itemNameFiltered) as any;
-                    }
-
-                    // C) Naming Convention v2: Try to match by Template SKU directly in our DB
+                    // B) Naming Convention v2: Try to match by Template SKU directly in our DB
                     if (!templateInfo && itemSku) {
                         templateInfo = skuMap.get(itemSku) || null;
                     }
