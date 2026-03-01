@@ -11,10 +11,15 @@ export async function GET(req: Request) {
         const action = urlParams.searchParams.get('action');
 
         if (action === 'list') {
-            // UI Fetch Handler
             const products = await prisma.webProduct.findMany({
                 include: {
-                    template: true
+                    template: {
+                        include: {
+                            files: {
+                                where: { type: 'MAIN' }
+                            }
+                        }
+                    }
                 },
                 orderBy: {
                     createdAt: 'desc'

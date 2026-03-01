@@ -28,9 +28,11 @@ import { toast } from "sonner";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
 interface Template {
+    id: string;
     key: string;
     sku?: string | null;
     name: string;
+    displayName?: string | null;
     mappedPaths: number;
     status: string;
     isVerified: boolean;
@@ -126,6 +128,163 @@ const ThumbnailViewer = ({ path, extension, className }: { path: string, extensi
                 </div>
             )}
         </div>
+    );
+}
+
+const ProductMatchRow = ({ wp, templates, onUpdate }: { wp: any, templates: Template[], onUpdate: (updated: any) => void }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [search, setSearch] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Zatvoriť dropdown pri kliknutí mimo by bolo ideálne, tu použijeme onBlur trik na wrapperi
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsEditing(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredTemplates = useMemo(() => {
+        if (!search) return templates.slice(0, 50); // Ukáž len prvých 50, ak nie je search, pre výkon
+        const lower = search.toLowerCase();
+        return templates.filter(t =>
+            t.key.toLowerCase().includes(lower) ||
+            t.name.toLowerCase().includes(lower) ||
+            t.sku?.toLowerCase().includes(lower) ||
+            t.displayName?.toLowerCase().includes(lower)
+        ).slice(0, 50);
+    }, [search, templates]);
+
+    const handleSave = async (templateId: string | null) => {
+        setIsSaving(true);
+        try {
+            const res = await fetch('/api/products/map', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ productId: wp.id, templateId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                onUpdate(data.product);
+                toast.success(templateId ? 'Šablóna priradená.' : 'Párovanie zrušené.');
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e: any) {
+            toast.error("Chyba pri ukladaní.");
+        } finally {
+            setIsSaving(false);
+            setIsEditing(false);
+        }
+    };
+
+    // Extract thumbnail path from the active template's webProduct mapping
+    const mainFile = wp.template?.files?.find((f: any) => f.type === 'MAIN') || wp.template?.files?.[0];
+
+    return (
+        <tr className="hover:bg-slate-50 transition-colors group">
+            <td className="px-6 py-4">
+                <p className="font-bold text-slate-900 text-sm">{wp.title}</p>
+            </td>
+            <td className="px-6 py-4 text-sm text-slate-500 font-mono">
+                {wp.sku || '-'}
+            </td>
+            <td className="px-6 py-4 relative">
+                {wp.template ? (
+                    <div className="flex items-center gap-3">
+                        {mainFile && (
+                            <div className="group/thumb relative">
+                                <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-slate-200">
+                                    <ThumbnailViewer path={mainFile.path} extension={mainFile.extension || '.psd'} className="w-full h-full" />
+                                </div>
+                                {/* Hover Preview */}
+                                <div className="absolute left-10 top-1/2 -translate-y-1/2 z-50 hidden group-hover/thumb:block bg-white p-2 rounded-2xl shadow-2xl border border-slate-200 w-64 h-64 pointer-events-none">
+                                    <ThumbnailViewer path={mainFile.path} extension={mainFile.extension || '.psd'} className="w-full h-full rounded-xl" />
+                                </div>
+                            </div>
+                        )}
+                        <div className="flex flex-col">
+                            <span className="font-bold text-blue-600 text-xs">{wp.template.displayName || wp.template.name}</span>
+                            <span className="text-[10px] text-slate-400">{wp.template.key}</span>
+                        </div>
+                        <button
+                            onClick={() => handleSave(null)}
+                            disabled={isSaving}
+                            className="ml-auto opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            title="Zrušiť párovanie"
+                        >
+                            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                        </button>
+                    </div>
+                ) : (
+                    <div className="relative" ref={wrapperRef}>
+                        {!isEditing ? (
+                            <button
+                                onClick={() => setIsEditing(true)}
+                                className="text-xs font-bold text-slate-400 hover:text-blue-600 border border-dashed border-slate-300 hover:border-blue-300 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2"
+                            >
+                                <Search size={14} />
+                                Vybrať šablónu
+                            </button>
+                        ) : (
+                            <div className="absolute top-0 left-0 w-80 bg-white shadow-xl border border-slate-200 rounded-xl z-50 overflow-hidden">
+                                <div className="p-2 border-b border-slate-100 flex items-center gap-2">
+                                    <Search size={14} className="text-slate-400 ml-2" />
+                                    <input
+                                        autoFocus
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                        placeholder="Hľadať šablónu (napr. 001)..."
+                                        className="w-full text-sm outline-none px-2 py-1 bg-transparent"
+                                    />
+                                </div>
+                                <div className="max-h-60 overflow-y-auto p-1">
+                                    {filteredTemplates.length === 0 ? (
+                                        <div className="p-4 text-center text-xs text-slate-400">Nenašli sa žiadne šablóny.</div>
+                                    ) : (
+                                        filteredTemplates.map(t => (
+                                            <button
+                                                key={t.id}
+                                                onClick={() => handleSave(t.id)}
+                                                className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded-lg flex flex-col gap-0.5"
+                                            >
+                                                <span className="text-xs font-bold text-slate-900">{t.displayName || t.name}</span>
+                                                <span className="text-[10px] text-slate-500">{t.key}</span>
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </td>
+            <td className="px-6 py-4">
+                {wp.templateId ? (
+                    <div className="flex items-center gap-2">
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-[10px] font-black uppercase flex items-center gap-1">
+                            <CheckCircle2 size={12} />
+                            Spárované
+                        </span>
+                        {wp.matchConfidence && wp.matchConfidence < 1.0 && (
+                            <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded font-bold" title="Umelá inteligencia si nie je 100% istá. Vizuálne overte.">
+                                AI ({(wp.matchConfidence * 100).toFixed(0)}%)
+                            </span>
+                        )}
+                    </div>
+                ) : (
+                    <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-[10px] font-black uppercase flex items-center gap-1 w-fit">
+                        <AlertCircle size={12} />
+                        Chýba Šablóna
+                    </span>
+                )}
+            </td>
+        </tr>
     );
 }
 
@@ -1025,44 +1184,16 @@ export default function TemplatesPage() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {webProducts.map(wp => (
-                                    <tr key={wp.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <p className="font-bold text-slate-900 text-sm">{wp.title}</p>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-500 font-mono">
-                                            {wp.sku || '-'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {wp.template ? (
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-blue-600 text-xs">{wp.template.displayName || wp.template.name}</span>
-                                                    <span className="text-[10px] text-slate-400">{wp.template.key}</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-slate-400 text-xs italic">Nenapárované</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {wp.templateId ? (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-[10px] font-black uppercase flex items-center gap-1">
-                                                        <CheckCircle2 size={12} />
-                                                        Spárované
-                                                    </span>
-                                                    {wp.matchConfidence && wp.matchConfidence < 1.0 && (
-                                                        <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded font-bold">
-                                                            AI ({(wp.matchConfidence * 100).toFixed(0)}%)
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-[10px] font-black uppercase flex items-center gap-1">
-                                                    <AlertCircle size={12} />
-                                                    Chýba Šablóna
-                                                </span>
-                                            )}
-                                        </td>
-                                    </tr>
+                                    <ProductMatchRow
+                                        key={wp.id}
+                                        wp={wp}
+                                        templates={templates}
+                                        onUpdate={(updatedProduct) => {
+                                            setWebProducts(current =>
+                                                current.map(p => p.id === updatedProduct.id ? updatedProduct : p)
+                                            );
+                                        }}
+                                    />
                                 ))}
                                 {webProducts.length === 0 && (
                                     <tr>
