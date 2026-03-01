@@ -143,6 +143,18 @@ export async function POST(req: Request) {
         }
 
         console.log(`[CloudExtract] Parsing PSD...`);
+
+        // --- CMYK HOTFIX FOR METADATA EXTRACTION ---
+        // ag-psd explicitly throws an error for CMYK (4) files before even looking at the `skip*` flags.
+        // Because we only need the layer tree (metadata), we temporarily spoof the colorMode byte to RGB (3).
+        if (fileBuffer.length > 26 && fileBuffer.toString('latin1', 0, 4) === '8BPS') {
+            const colorMode = fileBuffer.readUInt16BE(24);
+            if (colorMode === 4) {
+                console.log(`[CloudExtract] CMYK PSD detected. Spoofing colorMode to RGB (3) for metadata extraction...`);
+                fileBuffer.writeUInt16BE(3, 24);
+            }
+        }
+
         let psd;
         try {
             psd = readPsd(fileBuffer, {
