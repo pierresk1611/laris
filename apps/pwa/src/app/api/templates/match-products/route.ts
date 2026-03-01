@@ -5,7 +5,7 @@ import Groq from "groq-sdk";
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
     try {
         const urlParams = new URL(req.url);
         const action = urlParams.searchParams.get('action');
@@ -22,7 +22,15 @@ export async function POST(req: Request) {
             });
             return NextResponse.json({ success: true, products });
         }
+        return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
+    } catch (error: any) {
+        console.error("[MatchProducts GET] Error:", error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+}
 
+export async function POST(req: Request) {
+    try {
         // --- PAIRING ENGINE ---
         await updateProgress('AI_MATCH_PROGRESS', 0, 100, `Spúšťam Smart Match Engine...`);
 
