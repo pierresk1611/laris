@@ -251,15 +251,17 @@ export default function MappingClient({
     const handleSync = async () => {
         setIsSyncing(true);
         setSyncProgress(0);
-        setSyncLabel("Spúšťam stiahnutie katalógu a variácií...");
+        setSyncLabel("Pripravujem sťahovanie na pozadí...");
 
         try {
             const res = await fetch('/api/woo/sync-catalog', { method: 'POST' });
-            if (!res.ok) throw new Error("Sync failed");
-            toast.success("Katalóg bol úspešne synchronizovaný.");
-            setTimeout(() => window.location.reload(), 1500);
+            if (!res.ok) throw new Error("Sync failed to start");
+
+            // Note: We don't reload here anymore. 
+            // The useEffect EventSource will detect progress and reload at 100%.
+            toast.info("Synchronizácia spustená na pozadí. Môžete pokračovať v práci.");
         } catch (e: any) {
-            toast.error(e.message || "Failed to sync catalog");
+            toast.error(e.message || "Nepodarilo sa spustiť synchronizáciu");
             setIsSyncing(false);
         }
     };
