@@ -493,10 +493,26 @@ export default function OrderDetail({ params }: { params: Promise<{ id: string }
                                     <details className="group">
                                         <summary className="flex items-center gap-2 cursor-pointer text-slate-400 hover:text-slate-600 transition-colors">
                                             <ScanSearch size={16} />
-                                            <span className="text-xs font-bold uppercase tracking-widest">Zobraziť zdrojové dáta</span>
+                                            <span className="text-xs font-bold uppercase tracking-widest">Zobraziť zdrojové dáta e-shopu</span>
                                         </summary>
-                                        <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-600 font-mono whitespace-pre-wrap">
-                                            {JSON.stringify(activeItem.options, null, 2)}
+                                        <div className="mt-4 p-5 bg-slate-50/80 rounded-2xl border border-slate-200">
+
+                                            {/* Native WooCommerce Identifiers */}
+                                            <div className="flex gap-4 mb-4 pb-4 border-b border-slate-200">
+                                                <div>
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">WooCommerce SKU (Kód)</p>
+                                                    <p className="font-mono text-sm font-bold text-slate-800 bg-white px-2 py-1 rounded border border-slate-200 opacity-90">{activeItem.sku || 'N/A'}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Item ID</p>
+                                                    <p className="font-mono text-xs font-medium text-slate-600 py-1">{activeItem.id}</p>
+                                                </div>
+                                            </div>
+
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">RAW Options (EPO Data)</p>
+                                            <div className="text-xs text-slate-600 font-mono whitespace-pre-wrap overflow-x-auto bg-white p-3 rounded-xl border border-slate-100">
+                                                {JSON.stringify(activeItem.options, null, 2)}
+                                            </div>
                                         </div>
                                     </details>
                                 </section>

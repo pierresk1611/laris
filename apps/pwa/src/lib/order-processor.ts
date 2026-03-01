@@ -4,6 +4,7 @@ import { extractTemplateKey, parseEPO, needsInvitation, parseItemQuantities, ext
 export interface ProcessedItem {
     id: number;
     name: string;
+    sku: string | null;
     price: string;
     quantity: number;
     templateKey: string | null;
@@ -159,6 +160,19 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         templateInfo = skuMap.get(itemSku) || null;
                     }
 
+                    // C) FALLBACK: If SKU failed (e.g. wrong SKU on e-shop), try extracting the key from the Product Title
+                    if (!templateInfo && itemNameFiltered) {
+                        const extractedKeyFromTitle = extractTemplateKey(item.name);
+                        if (extractedKeyFromTitle) {
+                            // Try to find it in the primary Template Key map
+                            templateInfo = templateMap.get(extractedKeyFromTitle) || null;
+                            if (!templateInfo) {
+                                // Try finding it in WebProduct title map as a last resort
+                                templateInfo = webProductTitleMap.get(itemNameFiltered) || null;
+                            }
+                        }
+                    }
+
                     // D) Extraction: Regex fallback removed to enforce 100% strict matching.
                     // If A, B, or C didn't find an exact match, the item remains unmapped.
                     let templateKey = templateInfo ? templateInfo.key : null;
@@ -177,6 +191,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     const baseItem: ProcessedItem = {
                         id: item.id || 0,
                         name: item.name || "Neznáma položka",
+                        sku: itemSku || null,
                         price: item.price || "0",
                         quantity: 0, // placeholder, filled later
                         templateKey,
