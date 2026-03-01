@@ -195,6 +195,37 @@ export default function MappingClient({
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncProgress, setSyncProgress] = useState(0);
     const [syncLabel, setSyncLabel] = useState("");
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+    // Advanced search: Prioritize SKU matches first in the UX (just visual sorting/filtering)
+    const filteredProducts = products.filter(p =>
+        p.title.toLowerCase().includes(search.toLowerCase()) ||
+        (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()))
+    ).sort((a, b) => {
+        if (search) {
+            const aSkuMatch = a.sku?.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+            const bSkuMatch = b.sku?.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+            if (aSkuMatch !== bSkuMatch) return bSkuMatch - aSkuMatch;
+        }
+        return 0;
+    });
+
+    const isAllSelected = filteredProducts.length > 0 && selectedIds.size === filteredProducts.length;
+
+    const handleToggleAll = () => {
+        if (isAllSelected) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredProducts.map(p => p.id)));
+        }
+    };
+
+    const handleToggleOne = (id: string) => {
+        const next = new Set(selectedIds);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        setSelectedIds(next);
+    };
 
     useEffect(() => {
         let eventSource: EventSource;
@@ -256,6 +287,13 @@ export default function MappingClient({
             if (!res.ok) throw new Error("Failed to save mapping");
             if (newTemplateId) toast.success("Mapovanie úspešne uložené");
             else toast.success("Mapovanie bolo zmazané");
+
+            // Unselect if mapped
+            if (selectedIds.has(productId)) {
+                const next = new Set(selectedIds);
+                next.delete(productId);
+                setSelectedIds(next);
+            }
         } catch (e: any) {
             toast.error("Chyba: " + e.message);
             // Revert on failure
@@ -263,20 +301,30 @@ export default function MappingClient({
         }
     };
 
-    // Advanced search: Prioritize SKU matches first in the UX (just visual sorting/filtering)
-    const filteredProducts = products.filter(p =>
-        p.title.toLowerCase().includes(search.toLowerCase()) ||
-        (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()))
-    ).sort((a, b) => {
-        // If sorting is active, push unmapped to top or keep native? Keep standard alphabet.
-        // Actually, prioritizing items that match search in SKU is better if search isn't empty.
-        if (search) {
-            const aSkuMatch = a.sku?.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
-            const bSkuMatch = b.sku?.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
-            if (aSkuMatch !== bSkuMatch) return bSkuMatch - aSkuMatch;
+    const handleBulkMappingChange = async (newTemplateId: string | null) => {
+        if (selectedIds.size === 0) return;
+
+        const idsArray = Array.from(selectedIds);
+
+        // Optimistic UI Update
+        const previousVals = new Map(idsArray.map(id => [id, products.find(p => p.id === id)?.templateId]));
+        setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, templateId: newTemplateId } : p));
+
+        try {
+            const res = await fetch('/api/woo/save-mapping', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ webProductIds: idsArray, templateId: newTemplateId })
+            });
+            if (!res.ok) throw new Error("Failed to save bulk mapping");
+            toast.success(`Hromadne upravených ${idsArray.length} produktov`);
+            setSelectedIds(new Set()); // Clear selection on success
+        } catch (e: any) {
+            toast.error("Chyba pri hromadnom ukladaní: " + e.message);
+            // Revert on failure
+            setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, templateId: previousVals.get(p.id) || null } : p));
         }
-        return 0;
-    });
+    };
 
     return (
         <div className="space-y-6">
@@ -309,10 +357,37 @@ export default function MappingClient({
                 </div>
             </div>
 
+            {selectedIds.size > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 shadow-sm flex items-center justify-between mb-4 transition-all duration-300 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-3 text-blue-800 font-semibold px-2">
+                        <CheckCircle2 size={20} className="text-blue-500" />
+                        Označených {selectedIds.size} produktov
+                    </div>
+                    <div className="flex items-center gap-4 w-[500px]">
+                        <span className="text-sm font-medium text-blue-700 whitespace-nowrap">Hromadne priradiť šablónu:</span>
+                        <TemplateCombobox
+                            value={null} // Keep it empty default
+                            templates={templates}
+                            onChange={(newId) => {
+                                if (newId) handleBulkMappingChange(newId);
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
+
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="p-5 w-12 text-center">
+                                <input
+                                    type="checkbox"
+                                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                                    checked={isAllSelected}
+                                    onChange={handleToggleAll}
+                                />
+                            </th>
                             <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-widest w-48">Zdroj</th>
                             <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-widest">E-shop Produkt & SKU</th>
                             <th className="p-5 text-xs font-bold text-slate-400 uppercase tracking-widest w-[450px]">Prepojená Šablóna (Search)</th>
@@ -321,7 +396,15 @@ export default function MappingClient({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {filteredProducts.map(p => (
-                            <tr key={p.id} className="hover:bg-slate-50/80 transition-colors group">
+                            <tr key={p.id} className={`hover:bg-slate-50/80 transition-colors group ${selectedIds.has(p.id) ? 'bg-blue-50/50' : ''}`}>
+                                <td className="p-5 text-center align-middle">
+                                    <input
+                                        type="checkbox"
+                                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                                        checked={selectedIds.has(p.id)}
+                                        onChange={() => handleToggleOne(p.id)}
+                                    />
+                                </td>
                                 <td className="p-5 align-middle">
                                     <span className="inline-flex items-center px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
                                         {p.shopName || "Neznámy"}
@@ -375,7 +458,7 @@ export default function MappingClient({
                         ))}
                         {filteredProducts.length === 0 && (
                             <tr>
-                                <td colSpan={4} className="p-16 text-center">
+                                <td colSpan={5} className="p-16 text-center">
                                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-slate-100 mb-4 text-slate-400">
                                         <Search size={32} />
                                     </div>

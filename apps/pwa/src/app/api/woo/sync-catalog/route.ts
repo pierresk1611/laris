@@ -101,14 +101,16 @@ export async function POST(request: Request) {
             });
 
             if (existing) {
-                // Update non-destructive fields
+                // Update non-destructive fields and ensure shop linkage is correct
                 await prisma.webProduct.update({
                     where: { id: existing.id },
                     data: {
                         title: title || existing.title,
                         sku: sku || existing.sku,
                         imageUrl: imageUrl || existing.imageUrl,
-                        permalink: permalink || existing.permalink
+                        permalink: permalink || existing.permalink,
+                        shopId: shop.id,
+                        shopName: shop.name || "E-shop"
                     }
                 });
             } else {
