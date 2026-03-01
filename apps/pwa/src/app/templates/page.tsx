@@ -316,7 +316,7 @@ const ProductMatchRow = ({ wp, templates, onUpdate }: { wp: any, templates: Temp
                     </div>
                 ) : (
                     <div className="flex justify-end">
-                        <span className="px-3 py-1 bg-red-50 text-red-500 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-100">
+                        <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-200">
                             <AlertCircle size={10} />
                             Nenapárované
                         </span>
@@ -976,10 +976,13 @@ export default function TemplatesPage() {
                                                 {/* Badges */}
                                                 <div className="absolute top-4 right-4 flex flex-col gap-2">
                                                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-md bg-white/80 border text-[10px] font-black uppercase tracking-widest shadow-lg">
-                                                        <div className={`w-2 h-2 rounded-full ${template.status === 'ACTIVE' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' :
-                                                            (template.status === 'NEEDS_REVIEW' ? 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]')
+                                                        <div className={`w-2 h-2 rounded-full ${template.status === 'ACTIVE' && template.mappedPaths > 0 ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' :
+                                                            (template.status === 'ACTIVE' && template.mappedPaths === 0 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]' :
+                                                                (template.status === 'NEEDS_REVIEW' ? 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'))
                                                             }`}></div>
-                                                        <span className="text-slate-700">{template.status || 'DRAFT'}</span>
+                                                        <span className="text-slate-700">
+                                                            {template.status === 'ACTIVE' && template.mappedPaths === 0 ? 'CHYBA MAPOVANIA' : (template.status || 'DRAFT')}
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 <div className="absolute bottom-4 left-4 flex flex-col gap-1.5">

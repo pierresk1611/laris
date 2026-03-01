@@ -151,7 +151,7 @@ export async function POST(req: Request) {
                             key: groupKey,
                             name: templateName,
                             displayName: templateName,
-                            status: 'ACTIVE',
+                            status: 'NEEDS_REVIEW',
                             isVerified: false
                         }
                     });
@@ -240,7 +240,7 @@ export async function POST(req: Request) {
                             key: groupKey,
                             name: templateName,
                             displayName: templateName,
-                            status: 'ACTIVE',
+                            status: 'NEEDS_REVIEW',
                             isVerified: false
                         }
                     });

@@ -55,12 +55,11 @@ export async function POST(request: Request) {
         // Determine Status for this specific variant
         let finalStatus = 'PENDING_MAPPING';
         if (mappedCount > 0) {
-            // If all text fields are mapped, it's ACTIVE, otherwise NEEDS_REVIEW
-            if (totalTextLayers !== undefined && mappedCount >= totalTextLayers && totalTextLayers > 0) {
-                finalStatus = 'ACTIVE';
-            } else {
-                finalStatus = 'NEEDS_REVIEW';
-            }
+            // As per user requirement: Status ACTIVE requires >0 mapped fields
+            finalStatus = 'ACTIVE';
+        } else {
+            // If they saved an empty mapping (0 fields), it loses ACTIVE status
+            finalStatus = 'NEEDS_REVIEW';
         }
 
         // 1. Update relational TemplateFile
