@@ -4,15 +4,23 @@ import { prisma } from '@/lib/prisma';
 export async function PATCH(request: Request) {
     try {
         const body = await request.json();
-        const { webProductId, templateId } = body;
+        const { webProductId, templateId, sku } = body;
 
         if (!webProductId) {
             return NextResponse.json({ success: false, error: "Missing webProductId" }, { status: 400 });
         }
 
+        const dataToUpdate: any = {};
+        if (templateId !== undefined) {
+            dataToUpdate.templateId = templateId || null;
+        }
+        if (sku !== undefined) {
+            dataToUpdate.sku = sku || null;
+        }
+
         const updated = await prisma.webProduct.update({
             where: { id: webProductId },
-            data: { templateId: templateId || null }
+            data: dataToUpdate
         });
 
         return NextResponse.json({ success: true, product: updated });

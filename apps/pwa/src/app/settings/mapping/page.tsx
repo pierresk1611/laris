@@ -16,7 +16,8 @@ export default async function MappingPage() {
             id: true,
             key: true,
             name: true,
-            status: true
+            status: true,
+            imageUrl: true
         }
     });
 
