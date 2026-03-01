@@ -457,27 +457,52 @@ export default function TemplatesPage() {
         }
 
         setIsAnalyzing(true);
-        toast.info("Spúšťam AI analýzu...");
+        setAiProgress({ percentage: 0, label: "Pripravujem AI analýzu..." });
+
+        const BATCH_SIZE = 20;
+        let successCount = 0;
+        let processedCount = 0;
 
         try {
-            const res = await fetch('/api/inbox/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ items: inboxItems })
-            });
-            const data = await res.json().catch(() => ({ error: "Nečitateľná odpoveď zo servera (možný Timeout)." }));
+            for (let i = 0; i < inboxItems.length; i += BATCH_SIZE) {
+                const chunk = inboxItems.slice(i, i + BATCH_SIZE);
+                setAiProgress({
+                    percentage: Math.round((processedCount / inboxItems.length) * 100),
+                    label: `Analyzujem dávku ${processedCount + 1}-${processedCount + chunk.length} z ${inboxItems.length}...`
+                });
 
-            if (data.success) {
-                toast.success("AI analýza dokončená! Skontrolujte návrhy.");
-                fetchData();
-            } else {
-                toast.error(`Chyba AI: ${data.error || "Neznáma chyba"}`);
+                try {
+                    const res = await fetch('/api/inbox/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ items: chunk })
+                    });
+
+                    const data = await res.json().catch(() => ({ error: "Nečitateľná odpoveď (Timeout)" }));
+
+                    if (data.success) {
+                        successCount += chunk.length;
+                    } else {
+                        console.error(`AI Chunk Error:`, data.error);
+                        toast.error(`Zlyhanie pri dávke: ${data.error || "Neznáma chyba"}`);
+                    }
+                } catch (chunkErr: any) {
+                    console.error("Chunk Network Error:", chunkErr);
+                    toast.error(`Sieťová chyba pri dávke obídená: ${chunkErr.message}`);
+                }
+
+                processedCount += chunk.length;
+                // Obnova databázy v UI po každej úspešnej dávke
+                await fetchData();
             }
+
+            toast.success(`AI analýza dokončená! Skontrolovaných ${successCount}/${inboxItems.length} súborov.`);
         } catch (e: any) {
-            console.error("[runAiAnalysis] Network/Fetch Error:", e);
-            toast.error(`Zlyhanie požiadavky: ${e.message || "Nepodarilo sa spojiť so serverom"}`);
+            console.error("[runAiAnalysis] Fatal Error:", e);
+            toast.error(`Fatálna chyba AI procesu: ${e.message}`);
         } finally {
             setIsAnalyzing(false);
+            setAiProgress(null);
         }
     };
 
@@ -752,35 +777,48 @@ export default function TemplatesPage() {
                                 </div>
                             ) : (
                                 <>
-                                    <button
-                                        onClick={async () => {
-                                            toast.promise(
-                                                fetch('/api/inbox/aggregate', { method: 'POST' }).then(r => r.json()),
-                                                {
-                                                    loading: 'Analyzujem a zlučujem súbory...',
-                                                    success: (data) => {
-                                                        fetchData();
-                                                        return data.message;
-                                                    },
-                                                    error: 'Chyba pri agregácii'
-                                                }
-                                            );
-                                        }}
-                                        disabled={inboxItems.length === 0}
-                                        className="flex items-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
-                                    >
-                                        <Layers size={16} />
-                                        <span>Auto-Mapping</span>
-                                    </button>
+                                    {aiProgress ? (
+                                        <div className="w-full flex-grow md:w-96 min-w-[300px] animate-in slide-in-from-left-4">
+                                            <ProgressBar
+                                                progress={aiProgress.percentage}
+                                                label={aiProgress.label}
+                                                className="w-full"
+                                                showPercentage={true}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <button
+                                                onClick={async () => {
+                                                    toast.promise(
+                                                        fetch('/api/inbox/aggregate', { method: 'POST' }).then(r => r.json()),
+                                                        {
+                                                            loading: 'Analyzujem a zlučujem súbory...',
+                                                            success: (data) => {
+                                                                fetchData();
+                                                                return data.message;
+                                                            },
+                                                            error: 'Chyba pri agregácii'
+                                                        }
+                                                    );
+                                                }}
+                                                disabled={inboxItems.length === 0}
+                                                className="flex items-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
+                                            >
+                                                <Layers size={16} />
+                                                <span>Auto-Mapping</span>
+                                            </button>
 
-                                    <button
-                                        onClick={runAiAnalysis}
-                                        disabled={isAnalyzing || inboxItems.length === 0}
-                                        className={`flex items-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-2xl text-sm font-bold hover:bg-purple-700 transition-all shadow-xl shadow-purple-200 ${isAnalyzing ? 'opacity-70' : ''}`}
-                                    >
-                                        {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-                                        <span>AI Triedenie</span>
-                                    </button>
+                                            <button
+                                                onClick={runAiAnalysis}
+                                                disabled={isAnalyzing || inboxItems.length === 0}
+                                                className={`flex items-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-2xl text-sm font-bold hover:bg-purple-700 transition-all shadow-xl shadow-purple-200 ${isAnalyzing ? 'opacity-70' : ''}`}
+                                            >
+                                                {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                                                <span>AI Triedenie</span>
+                                            </button>
+                                        </>
+                                    )}
                                 </>
                             )}
                         </>
