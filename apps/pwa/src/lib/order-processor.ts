@@ -61,7 +61,21 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
             { id: t.id, isVerified: t.isVerified, key: t.key }
         ]));
 
-        return rawOrders.map(order => {
+        const processedOrders: ProcessedOrder[] = [];
+        let i = 0;
+
+        for (const order of rawOrders) {
+            i++;
+            // Report progress every item
+            try {
+                // Inline import to avoid circular dependencies if any, or just rely on existing imports if added to top.
+                // We'll import it at the top of the file in the next step, assuming it's available.
+                const { updateProgress } = require('@/lib/settings');
+                await updateProgress('WOO_SYNC_PROGRESS', i, rawOrders.length, `Spracovávam objednávku ${i} z ${rawOrders.length}...`);
+            } catch (e) {
+                // Ignore DB progress errors to not break sync
+            }
+
             try {
                 if (!order || typeof order !== 'object') {
                     throw new Error("Order data is not an object");
@@ -81,7 +95,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
 
                     const verifiedItems = localState.orderData as ProcessedItem[];
 
-                    return {
+                    processedOrders.push({
                         id: order.id || 0,
                         number: order.number?.toString() || order.id?.toString() || "0000",
                         crmId: extractCRMId(order.meta_data || []), // Keep pulling CRM ID dynamically or use saved? Let's use dynamic to be safe, or saved if we want strict lock.
@@ -99,7 +113,8 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         shopName: shopName,
                         shopId: shopId,
                         items: verifiedItems // USED VERIFIED ITEMS
-                    };
+                    });
+                    continue;
                 }
 
                 const crmId = extractCRMId(order.meta_data || []);
@@ -185,7 +200,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     }
                 })();
 
-                return {
+                processedOrders.push({
                     id: order.id || 0,
                     number: order.number?.toString() || order.id?.toString() || "0000",
                     crmId,
@@ -209,10 +224,10 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     shopName: shopName || cleanSource,
                     shopId: shopId || "",
                     items
-                };
+                });
             } catch (innerErr: any) {
                 console.error("Single order processing error:", innerErr);
-                return {
+                processedOrders.push({
                     id: order?.id || 0,
                     number: "ERROR",
                     crmId: null,
@@ -225,9 +240,10 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                     shopName: shopName || "Môj E-shop",
                     shopId: shopId || "",
                     items: []
-                };
+                });
             }
-        });
+        }
+        return processedOrders;
     } catch (globalErr: any) {
         console.error("Global processOrders error:", globalErr);
         return [];

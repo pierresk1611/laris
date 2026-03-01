@@ -1,19 +1,29 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSetting } from '@/lib/settings';
+import { getSetting, updateProgress } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
     try {
-        console.log("[SyncProducts] Fetching settings...");
+        const urlParams = new URL(req.url);
+        const page = parseInt(urlParams.searchParams.get('page') || '1', 10);
+        const isInit = urlParams.searchParams.get('init') === 'true';
 
-        // Use the same WooCommerce keys as the orders API or try to get them
+        console.log(`[SyncProducts] Fetching page ${page}...`);
+
+        // Emit initial progress if starting
+        if (isInit) {
+            await updateProgress('WOO_PRODUCTS_PROGRESS', 0, 100, `Inicializujem sťahovanie produktov...`);
+        } else {
+            // Keep alive
+            await updateProgress('WOO_PRODUCTS_PROGRESS', page, 100, `Sťahujem stranu ${page} z WooCommerce...`);
+        }
+
         const ck = await getSetting('WOO_KEY');
         const cs = await getSetting('WOO_SECRET');
         const urlRaw = await getSetting('WOO_URL');
 
-        // Fallback to active shop if settings not directly available
         let finalUrl = urlRaw;
         let finalCk = ck;
         let finalCs = cs;
@@ -22,7 +32,7 @@ export async function POST(req: Request) {
             // @ts-ignore
             const shop = await prisma.shop.findFirst();
             if (!shop) {
-                return NextResponse.json({ success: false, error: 'Chýbajú WooCommerce kľúče (ck/cs) a žiadny e-shop nie je nastavený.' }, { status: 400 });
+                return NextResponse.json({ success: false, error: 'Chýbajú WooCommerce kľúče.' }, { status: 400 });
             }
             finalUrl = shop.url;
             finalCk = shop.ck;
@@ -31,60 +41,46 @@ export async function POST(req: Request) {
 
         const baseUrl = finalUrl?.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
 
-        console.log(`[SyncProducts] Fetching from ${baseUrl}...`);
-
-        let page = 1;
-        let totalFetched = 0;
-        let hasMore = true;
-        const productsToUpsert: any[] = [];
-
-        while (hasMore) {
-            const endpoint = `${baseUrl}/wp-json/wc/v3/products?per_page=100&page=${page}&consumer_key=${finalCk}&consumer_secret=${finalCs}`;
-            const res = await fetch(endpoint);
-
-            if (!res.ok) {
-                console.error(`[SyncProducts] API Error: ${res.status} ${res.statusText}`);
-                break;
-            }
-
-            const products = await res.json();
-
-            if (products.length === 0) {
-                hasMore = false;
-                break;
-            }
-
-            for (const p of products) {
-                productsToUpsert.push({
-                    title: p.name || p.title,
-                    permalink: p.permalink,
-                    sku: p.sku || null
-                });
-            }
-
-            totalFetched += products.length;
-            page++;
-
-            // Safety limit (e.g. max 50 pages = 5000 products)
-            if (page > 50) break;
+        // If it's the very first page, optionally clear table
+        if (isInit) {
+            // @ts-ignore
+            await prisma.webProduct.deleteMany({});
+            console.log("[SyncProducts] Cleared existing products for fresh sync");
         }
 
-        console.log(`[SyncProducts] Fetched ${totalFetched} products. Saving to database...`);
+        const endpoint = `${baseUrl}/wp-json/wc/v3/products?per_page=100&page=${page}&consumer_key=${finalCk}&consumer_secret=${finalCs}`;
+        const res = await fetch(endpoint);
 
-        // Clear existing and insert new (simplest sync strategy for this lookup table)
-        // @ts-ignore
-        await prisma.webProduct.deleteMany({});
+        if (!res.ok) {
+            console.error(`[SyncProducts] API Error: ${res.status} ${res.statusText}`);
+            return NextResponse.json({ success: false, error: `WooCommerce API Error: ${res.status}` }, { status: 500 });
+        }
 
-        // Prisma createMany does not return the created objects but it's much faster
-        // @ts-ignore
-        const result = await prisma.webProduct.createMany({
-            data: productsToUpsert
-        });
+        const products = await res.json();
+        const hasMore = products.length > 0;
+
+        if (products.length > 0) {
+            const productsToUpsert = products.map((p: any) => ({
+                title: p.name || p.title,
+                permalink: p.permalink,
+                sku: p.sku || null
+            }));
+
+            // @ts-ignore
+            const result = await prisma.webProduct.createMany({
+                data: productsToUpsert
+            });
+
+            console.log(`[SyncProducts] Saved ${result.count} products from page ${page}`);
+        } else {
+            await updateProgress('WOO_PRODUCTS_PROGRESS', 100, 100, `Synchronizácia produktov dokončená.`, 'COMPLETED');
+        }
 
         return NextResponse.json({
             success: true,
-            message: `Úspešne synchronizovaných ${result.count} produktov z webu.`,
-            count: result.count
+            hasMore: hasMore,
+            nextPage: page + 1,
+            count: products.length
         });
 
     } catch (error: any) {

@@ -10,6 +10,7 @@ import {
   AlertCircle,
   ExternalLink
 } from "lucide-react";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 const mockOrders = [
   {
@@ -50,6 +51,10 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState('all');
 
+  // Progress states
+  const [wooSyncProgress, setWooSyncProgress] = useState<{ percentage: number, label: string } | null>(null);
+  const [wooProductsProgress, setWooProductsProgress] = useState<{ percentage: number, label: string } | null>(null);
+
   useEffect(() => {
     const fetchOrders = async () => {
       try {
@@ -68,6 +73,23 @@ export default function Dashboard() {
       }
     };
     fetchOrders();
+  }, []);
+
+  // Poll for progress
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/progress');
+        const data = await res.json();
+        if (data.success) {
+          setWooSyncProgress(data.wooSync);
+          setWooProductsProgress(data.wooProducts);
+        }
+      } catch (e) {
+        console.error("Progress poll failed", e);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
   }, []);
 
   // Shared Logic for Status Checking (Refined for Active Workflow)
@@ -119,6 +141,30 @@ export default function Dashboard() {
   return (
     <div>
       <AppHeader title="Prehľad" />
+
+      {/* Progress Bars (Active Syncs) */}
+      {(wooSyncProgress || wooProductsProgress) && (
+        <div className="mb-6 space-y-3">
+          {wooSyncProgress && (
+            <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl animate-in fade-in slide-in-from-top-4">
+              <ProgressBar
+                progress={wooSyncProgress.percentage}
+                label={`Sync Objednávok: ${wooSyncProgress.label}`}
+                colorClass="bg-blue-500"
+              />
+            </div>
+          )}
+          {wooProductsProgress && (
+            <div className="bg-purple-50/50 border border-purple-100 p-4 rounded-2xl animate-in fade-in slide-in-from-top-4">
+              <ProgressBar
+                progress={wooProductsProgress.percentage}
+                label={`Web Produkty: ${wooProductsProgress.label}`}
+                colorClass="bg-purple-500"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">

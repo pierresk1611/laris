@@ -297,45 +297,70 @@ export default function SettingsPage() {
                 <div className="space-y-6">
                     {shops.map((shop, idx) => (
                         <div key={shop.id || idx} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                                <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                                    <Globe size={16} className="text-blue-500" />
-                                    {shop.name || "Nový E-shop"}
-                                </h3>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={async () => {
-                                            setSaving(`sync-${shop.id}`);
-                                            try {
-                                                const res = await fetch('/api/templates/sync-products', { method: 'POST' });
-                                                const result = await res.json();
-                                                alert(result.success ? `✅ ${result.message}` : `❌ Chyba: ${result.error}`);
-                                            } catch (e) {
-                                                alert("❌ Chyba pri synchronizácii webových produktov.");
-                                            } finally {
-                                                setSaving(null);
-                                            }
-                                        }}
-                                        disabled={saving !== null}
-                                        className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-                                    >
-                                        {saving === `sync-${shop.id}` ? "Sťahujem..." : "Stiahnuť produkty z webu"}
-                                    </button>
-                                    <button
-                                        onClick={() => testConnection(shop)}
-                                        disabled={saving !== null}
-                                        className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-                                    >
-                                        {saving === `test-${shop.id}` ? "Testujem..." : "Testovať spojenie"}
-                                    </button>
-                                    <button
-                                        onClick={() => handleSaveShop(shop)}
-                                        disabled={saving !== null}
-                                        className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors shadow-sm"
-                                    >
-                                        {saving === `shop-${shop.id}` ? "Ukladám..." : "Uložiť e-shop"}
-                                    </button>
+                            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                                        <Globe size={16} className="text-blue-500" />
+                                        {shop.name || "Nový E-shop"}
+                                    </h3>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={async () => {
+                                                setSaving(`sync-${shop.id}`);
+                                                try {
+                                                    let page = 1;
+                                                    let hasMore = true;
+                                                    let totalCount = 0;
+
+                                                    while (hasMore) {
+                                                        const isInit = page === 1 ? 'true' : 'false';
+                                                        const res = await fetch(`/api/templates/sync-products?page=${page}&init=${isInit}`, { method: 'POST' });
+                                                        const result = await res.json();
+
+                                                        if (result.success) {
+                                                            hasMore = result.hasMore;
+                                                            totalCount += (result.count || 0);
+                                                            page++;
+                                                        } else {
+                                                            alert(`❌ Chyba: ${result.error}`);
+                                                            break;
+                                                        }
+                                                    }
+                                                    if (hasMore === false) {
+                                                        alert(`✅ Úspešne stiahnutých ${totalCount} produktov.`);
+                                                    }
+                                                } catch (e) {
+                                                    alert("❌ Chyba pri synchronizácii webových produktov.");
+                                                } finally {
+                                                    setSaving(null);
+                                                }
+                                            }}
+                                            disabled={saving !== null}
+                                            className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                                        >
+                                            {saving === `sync-${shop.id}` ? "Sťahujem..." : "Stiahnuť produkty z webu"}
+                                        </button>
+                                        <button
+                                            onClick={() => testConnection(shop)}
+                                            disabled={saving !== null}
+                                            className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                                        >
+                                            {saving === `test-${shop.id}` ? "Testujem..." : "Testovať spojenie"}
+                                        </button>
+                                        <button
+                                            onClick={() => handleSaveShop(shop)}
+                                            disabled={saving !== null}
+                                            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors shadow-sm"
+                                        >
+                                            {saving === `shop-${shop.id}` ? "Ukladám..." : "Uložiť e-shop"}
+                                        </button>
+                                    </div>
                                 </div>
+                                {saving === `sync-${shop.id}` && (
+                                    <div className="w-full bg-slate-100 p-4 rounded-xl border border-blue-100 flex items-center justify-center animate-pulse">
+                                        <span className="text-xs font-bold text-blue-600">Prebieha sťahovanie stoviek produktov... Postup vidíte na Dashboarde.</span>
+                                    </div>
+                                )}
                             </div>
                             <div className="p-6 grid grid-cols-2 gap-6">
                                 <div className="space-y-4">

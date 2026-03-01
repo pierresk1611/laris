@@ -606,7 +606,7 @@ export default function TemplatesPage() {
                         </>
                     )}
 
-                    <div className="flex flex-col w-full md:w-auto gap-2">
+                    <div className="flex flex-col w-full md:w-64 gap-2">
                         <button
                             onClick={handleDropboxSync}
                             disabled={isSyncing}
@@ -619,8 +619,8 @@ export default function TemplatesPage() {
                             <ProgressBar
                                 progress={syncProgress.percentage}
                                 label={syncProgress.label}
-                                className="w-full md:w-48"
-                                showPercentage={false}
+                                className="w-full mt-2"
+                                showPercentage={true}
                             />
                         )}
                     </div>
@@ -759,8 +759,8 @@ export default function TemplatesPage() {
                                         setSelectedItems(new Set()); // Reset selection on filter change
                                     }}
                                     className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${inboxFilter === filter.id
-                                            ? 'bg-blue-600 text-white shadow-md'
-                                            : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'
+                                        ? 'bg-blue-600 text-white shadow-md'
+                                        : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'
                                         }`}
                                 >
                                     {filter.label}
