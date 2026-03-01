@@ -62,15 +62,38 @@ export async function POST(req: Request) {
             ${filesToAnalyze}
             `;
 
-            // 3. Call AI
-            const aiResponse = await groq.chat.completions.create({
-                messages: [{ role: 'user', content: prompt }],
-                model: "llama-3.3-70b-versatile",
-                temperature: 0.1,
-                response_format: { type: "json_object" }
-            });
+            // 3. Call AI with fallback mechanism
+            let aiResponse;
+            try {
+                // Primary model (High intelligence, but strict rate limits)
+                aiResponse = await groq.chat.completions.create({
+                    messages: [{ role: 'user', content: prompt }],
+                    model: "llama-3.3-70b-versatile",
+                    temperature: 0.1,
+                    response_format: { type: "json_object" }
+                });
+            } catch (primaryError: any) {
+                if (primaryError?.error?.error?.code === 'rate_limit_exceeded' || primaryError.status === 429) {
+                    console.warn(`[InboxAnalyze] Rate limit hit for 70b-versatile. Falling back to 8b-instant. Batch: ${i}-${i + BATCH_SIZE}`);
+                    try {
+                        // Fallback model (Faster/Cheaper, less likely to hit daily tokens)
+                        aiResponse = await groq.chat.completions.create({
+                            messages: [{ role: 'user', content: prompt }],
+                            model: "llama-3.1-8b-instant",
+                            temperature: 0.1,
+                            response_format: { type: "json_object" }
+                        });
+                    } catch (fallbackError: any) {
+                        console.error("[InboxAnalyze] Both models failed.", fallbackError);
+                        throw new Error(`Umelá inteligencia zlyhala (Zálohový model). Správa: ${fallbackError.message}`);
+                    }
+                } else {
+                    console.error("[InboxAnalyze] Primary model failed with non-429 error.", primaryError);
+                    throw new Error(`Umelá inteligencia zlyhala. Správa: ${primaryError.message}`);
+                }
+            }
 
-            const content = aiResponse.choices[0]?.message?.content || "{}";
+            const content = aiResponse?.choices?.[0]?.message?.content || "{}";
             try {
                 Object.assign(predictions, JSON.parse(content));
             } catch (err) {
