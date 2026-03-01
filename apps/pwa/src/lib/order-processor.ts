@@ -144,27 +144,31 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                 const items = (order.line_items || []).flatMap((item: any) => {
                     if (!item) return [];
 
-                    // 0. Smart Match Engine: Check WebProducts by SKU or Exact Name
                     const itemSku = (item.sku || "").toString().trim().toUpperCase();
                     const itemNameFiltered = (item.name || "").toString().trim().toLowerCase();
 
                     let templateInfo: TemplateInfo | null = null;
 
-                    // A) First try WebProduct SKU map (Exact Match from shop)
+                    // A) STRICT MANUAL MAPPING: Check Master Mapping Table (WebProducts) First
+                    // 1. By exact SKU
                     if (itemSku) {
-                        templateInfo = webProductSkuMap.get(itemSku) as any;
+                        templateInfo = webProductSkuMap.get(itemSku) || null;
+                    }
+                    // 2. By exact Title (if SKU missing or not mapped)
+                    if (!templateInfo && itemNameFiltered) {
+                        templateInfo = webProductTitleMap.get(itemNameFiltered) || null;
                     }
 
-                    // B) Naming Convention v2: Try to match by Template SKU directly in our DB
+                    // B) NATIVE TEMPLATE MATCH: Try to match by Template's own SKU
                     if (!templateInfo && itemSku) {
                         templateInfo = skuMap.get(itemSku) || null;
                     }
 
-                    // C) FALLBACK: If SKU failed (e.g. wrong SKU on e-shop), try extracting the key from the Product Title
+                    // C) FALLBACK HEURISTIC: Extract key via Regex from Title
                     if (!templateInfo && itemNameFiltered) {
                         const extractedKeyFromTitle = extractTemplateKey(item.name);
                         if (extractedKeyFromTitle) {
-                            // Try to find it in the primary Template Key map
+                            // Try to find it in the primary Template Key map (Exact Match)
                             templateInfo = templateMap.get(extractedKeyFromTitle) || null;
 
                             // If exact match fails, do a 'includes' partial match on existing keys
@@ -176,22 +180,16 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                                     }
                                 }
                             }
-
-                            if (!templateInfo) {
-                                // Try finding it in WebProduct title map as a last resort
-                                templateInfo = webProductTitleMap.get(itemNameFiltered) || null;
-                            }
                         }
                     }
 
-                    // D) Extraction: Regex fallback removed to enforce 100% strict matching.
-                    // If A, B, or C didn't find an exact match, the item remains unmapped.
+                    // D) RESULT
+                    // If A, B, or C didn't find a match, the item remains unmapped.
                     let templateKey = templateInfo ? templateInfo.key : null;
 
                     // The original change had a redeclaration of templateInfo here.
                     // Instead, we ensure the existing templateInfo variable is correctly typed and populated.
                     // The instruction was to ensure templateInfo has a status property, which it does now
-                    // because it's typed as TemplateInfo.
 
                     const metaData = item.meta_data || [];
                     const epo = parseEPO(metaData);
