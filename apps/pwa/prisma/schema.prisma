@@ -35,6 +35,7 @@ model Template {
   alias        String?  // Deprecated: Display Name / User customized alias
   variants     Json?    @default("[]") // Deprecated: Array of { type, path, extension, imageUrl? }
   files        TemplateFile[]
+  webProducts  WebProduct[] // Added for Smart Match
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -138,12 +139,15 @@ model AiClassificationExample {
 }
 
 model WebProduct {
-  id        String   @id @default(cuid())
-  title     String
-  permalink String?
-  sku       String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(cuid())
+  title           String
+  permalink       String?
+  sku             String?
+  templateId      String?
+  template        Template? @relation(fields: [templateId], references: [id])
+  matchConfidence Float?    // For AI sorting suggestions (0.0 to 1.0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 enum Role {

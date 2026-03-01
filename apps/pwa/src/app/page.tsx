@@ -8,7 +8,8 @@ import {
   Cpu,
   Clock,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  CheckCircle2
 } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
@@ -271,9 +272,15 @@ export default function Dashboard() {
                       <div className="max-w-[200px]">
                         <p className="text-xs font-bold text-slate-900 truncate">{order.items?.[0]?.name || 'Neznáma položka'}</p>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {order.items?.[0]?.templateKey && (
-                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-black uppercase border border-blue-100">
-                              {order.items[0].templateKey}
+                          {order.items?.[0]?.templateKey && order.items?.[0]?.templateId ? (
+                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[9px] font-black uppercase flex items-center gap-1 border border-green-200" title={`Napárované na šablónu: ${order.items[0].templateKey}`}>
+                              <CheckCircle2 size={10} />
+                              Spárované
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[9px] font-black uppercase flex items-center gap-1 border border-orange-200" title="Systém nenašiel grafickú šablónu pre tento produkt">
+                              <AlertCircle size={10} />
+                              Chýba šablóna
                             </span>
                           )}
                           {order.items?.[0]?.material && (

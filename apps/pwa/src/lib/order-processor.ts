@@ -61,6 +61,25 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
             { id: t.id, isVerified: t.isVerified, key: t.key }
         ]));
 
+        // 2. Pre-fetch all WebProducts to utilize Smart Match logic
+        const webProducts = await prisma.webProduct.findMany({
+            where: { templateId: { not: null } },
+            include: { template: true } // We need the template key and id
+        }).catch((err: any) => {
+            console.error("Prisma WebProducts fetch error:", err);
+            return [];
+        });
+
+        const webProductSkuMap = new Map((webProducts as any[]).filter(p => p.sku).map((p: any) => [
+            p.sku.toUpperCase(),
+            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key }
+        ]));
+
+        const webProductTitleMap = new Map((webProducts as any[]).map((p: any) => [
+            p.title.trim().toLowerCase(),
+            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key }
+        ]));
+
         const processedOrders: ProcessedOrder[] = [];
         let i = 0;
 
@@ -123,12 +142,30 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                 const items = (order.line_items || []).flatMap((item: any) => {
                     if (!item) return [];
 
-                    // 1. Naming Convention v2: Try to match by SKU from WooCommerce directly (THE GOLDEN KEY)
+                    // 0. Smart Match Engine: Check WebProducts by SKU or Exact Name
                     const itemSku = (item.sku || "").toString().trim().toUpperCase();
-                    let templateInfo: { id: string, isVerified: boolean, key: string } | null | undefined = itemSku ? (skuMap.get(itemSku) as any) : null;
+                    const itemNameFiltered = (item.name || "").toString().trim().toLowerCase();
+
+                    let templateInfo: { id: string, isVerified: boolean, key: string } | null | undefined = null;
+
+                    // First try WebProduct SKU map
+                    if (itemSku) {
+                        templateInfo = webProductSkuMap.get(itemSku) as any;
+                    }
+
+                    // Then try WebProduct Title map
+                    if (!templateInfo && itemNameFiltered) {
+                        templateInfo = webProductTitleMap.get(itemNameFiltered) as any;
+                    }
+
+                    // 1. Naming Convention v2: Try to match by Template SKU directly
+                    if (!templateInfo && itemSku) {
+                        templateInfo = skuMap.get(itemSku) as any;
+                    }
+
                     let templateKey = templateInfo ? templateInfo.key : null;
 
-                    // 2. Fallback to Regex parser if SKU didn't match
+                    // 2. Fallback to Regex parser if SKU/WebProduct didn't match
                     if (!templateInfo) {
                         templateKey = extractTemplateKey(item.name || "", (item.sku || "").toString());
                         templateInfo = templateKey ? (templateMap.get(templateKey.toUpperCase()) as any) : null;

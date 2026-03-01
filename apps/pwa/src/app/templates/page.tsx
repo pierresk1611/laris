@@ -21,7 +21,8 @@ import {
     ArrowRight,
     ChevronDown,
     ChevronRight,
-    Sparkles
+    Sparkles,
+    AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -129,7 +130,7 @@ const ThumbnailViewer = ({ path, extension, className }: { path: string, extensi
 }
 
 export default function TemplatesPage() {
-    const [activeTab, setActiveTab] = useState<'TEMPLATES' | 'INBOX'>('TEMPLATES');
+    const [activeTab, setActiveTab] = useState<'TEMPLATES' | 'INBOX' | 'MATCH'>('TEMPLATES');
 
     // Templates State
     const [templates, setTemplates] = useState<Template[]>([]);
@@ -138,6 +139,11 @@ export default function TemplatesPage() {
     const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [inboxFilter, setInboxFilter] = useState<'ALL' | 'PSD' | 'AI' | 'IMAGES' | 'OTHER'>('ALL');
+
+    // Web Match State
+    const [webProducts, setWebProducts] = useState<any[]>([]);
+    const [isMatching, setIsMatching] = useState(false);
+    const [matchProgress, setMatchProgress] = useState<{ percentage: number, label: string } | null>(null);
 
     // Common State
     const [isSyncing, setIsSyncing] = useState(false);
@@ -153,15 +159,17 @@ export default function TemplatesPage() {
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [templatesRes, settingsRes, inboxRes] = await Promise.all([
+            const [templatesRes, settingsRes, inboxRes, matchRes] = await Promise.all([
                 fetch('/api/templates', { cache: 'no-store' }),
                 fetch('/api/settings', { cache: 'no-store' }),
-                fetch('/api/inbox', { cache: 'no-store' })
+                fetch('/api/inbox', { cache: 'no-store' }),
+                fetch('/api/templates/match-products?action=list', { cache: 'no-store' })
             ]);
 
             const templatesData = await templatesRes.json();
             const settingsData = await settingsRes.json();
             const inboxData = await inboxRes.json();
+            const matchData = await matchRes.json();
 
             if (templatesData.success) {
                 // Sort: Verified first, then alphabetically
@@ -175,6 +183,10 @@ export default function TemplatesPage() {
 
             if (inboxData.success) {
                 setInboxItems(inboxData.items);
+            }
+
+            if (matchData.success) {
+                setWebProducts(matchData.products);
             }
 
             // Extract last sync info from settings
@@ -202,7 +214,7 @@ export default function TemplatesPage() {
         // Polling for progress
         const interval = setInterval(async () => {
             // Poll if anything is active OR if we have an active bulk mapping status
-            if (!isSyncing && !isAnalyzing && !isBulkMapping) return;
+            if (!isSyncing && !isAnalyzing && !isBulkMapping && !isMatching) return;
 
             try {
                 const res = await fetch('/api/progress');
@@ -211,8 +223,7 @@ export default function TemplatesPage() {
                 if (data.success) {
                     if (data.sync) setSyncProgress(data.sync);
                     if (data.ai) setAiProgress(data.ai);
-
-                    // Handle bulk map progress specially
+                    if (data.aiMatch) setMatchProgress(data.aiMatch);
                     if (data.bulkMap) {
                         setBulkMapProgress(data.bulkMap);
                         if (data.bulkMap.status === 'COMPLETED') {
@@ -538,6 +549,16 @@ export default function TemplatesPage() {
                             </span>
                         )}
                     </button>
+                    <button
+                        onClick={() => setActiveTab('MATCH')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'MATCH'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                    >
+                        <Sparkles size={16} />
+                        Párovanie s E-shopom
+                    </button>
                 </div>
 
                 <div className="flex items-center gap-3 w-full md:w-auto">
@@ -605,30 +626,30 @@ export default function TemplatesPage() {
                             )}
                         </>
                     )}
+                </div>
 
-                    <div className="flex flex-col w-full md:w-64 gap-2">
-                        <button
-                            onClick={handleDropboxSync}
-                            disabled={isSyncing}
-                            className={`flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-sm font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 ${isSyncing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-                            <span>{isSyncing ? 'Skenujem...' : 'Skenovať Dropbox'}</span>
-                        </button>
-                        {isSyncing && syncProgress && (
-                            <ProgressBar
-                                progress={syncProgress.percentage}
-                                label={syncProgress.label}
-                                className="w-full mt-2"
-                                showPercentage={true}
-                            />
-                        )}
-                    </div>
+                <div className="flex flex-col w-full md:w-64 gap-2">
+                    <button
+                        onClick={handleDropboxSync}
+                        disabled={isSyncing}
+                        className={`flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-sm font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 ${isSyncing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                        <span>{isSyncing ? 'Skenujem...' : 'Skenovať Dropbox'}</span>
+                    </button>
+                    {isSyncing && syncProgress && (
+                        <ProgressBar
+                            progress={syncProgress.percentage}
+                            label={syncProgress.label}
+                            className="w-full mt-2"
+                            showPercentage={true}
+                        />
+                    )}
                 </div>
             </div>
 
             {/* Content Area */}
-            {activeTab === 'TEMPLATES' ? (
+            {activeTab === 'TEMPLATES' && (
                 <div className="space-y-6">
                     <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto">
                         <button
@@ -739,7 +760,9 @@ export default function TemplatesPage() {
                         )}
                     </div>
                 </div>
-            ) : (
+            )}
+
+            {activeTab === 'INBOX' && (
                 /* INBOX TAB */
                 <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
                     {/* Inbox Filters */}
@@ -909,6 +932,117 @@ export default function TemplatesPage() {
                             </table>
                         </div>
                     )}
+                </div>
+            )}
+
+            {activeTab === 'MATCH' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                        <div>
+                            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                <Sparkles className="text-purple-500" />
+                                Smart Match: Produkty a Šablóny
+                            </h2>
+                            <p className="text-sm text-slate-500 mt-1">
+                                Spárujte WooCommerce produkty s grafickými šablónami, aby systém vedel, čo generovať.
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <button
+                                onClick={async () => {
+                                    setIsMatching(true);
+                                    try {
+                                        const res = await fetch('/api/templates/match-products', { method: 'POST' });
+                                        const data = await res.json();
+                                        if (data.success) {
+                                            toast.success(`Úspešne spárované: ${data.totalMapped} produktov.`);
+                                            fetchData();
+                                        } else {
+                                            toast.error(data.error);
+                                        }
+                                    } catch (e) {
+                                        toast.error("Chyba pri párovaní.");
+                                    } finally {
+                                        setIsMatching(false);
+                                    }
+                                }}
+                                disabled={isMatching}
+                                className={`flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-2xl text-sm font-bold hover:bg-purple-700 transition-all shadow-xl shadow-purple-200 ${isMatching ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                {isMatching ? <Loader2 className="animate-spin" size={16} /> : <Wand2 size={16} />}
+                                Spustiť Auto-Match
+                            </button>
+                            {isMatching && matchProgress && (
+                                <ProgressBar
+                                    progress={matchProgress?.percentage ?? 0}
+                                    label={matchProgress?.label ?? ''}
+                                    colorClass="bg-purple-500"
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50/50">
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Názov Produktu</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">SKU</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Šablóna</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status / Istota</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {webProducts.map(wp => (
+                                    <tr key={wp.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <p className="font-bold text-slate-900 text-sm">{wp.title}</p>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-500 font-mono">
+                                            {wp.sku || '-'}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {wp.template ? (
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-blue-600 text-xs">{wp.template.displayName || wp.template.name}</span>
+                                                    <span className="text-[10px] text-slate-400">{wp.template.key}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-400 text-xs italic">Nenapárované</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {wp.templateId ? (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-[10px] font-black uppercase flex items-center gap-1">
+                                                        <CheckCircle2 size={12} />
+                                                        Spárované
+                                                    </span>
+                                                    {wp.matchConfidence && wp.matchConfidence < 1.0 && (
+                                                        <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded font-bold">
+                                                            AI ({(wp.matchConfidence * 100).toFixed(0)}%)
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-[10px] font-black uppercase flex items-center gap-1">
+                                                    <AlertCircle size={12} />
+                                                    Chýba Šablóna
+                                                </span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {webProducts.length === 0 && (
+                                    <tr>
+                                        <td colSpan={4} className="text-center p-8 text-slate-500">
+                                            Zatiaľ neboli stiahnuté žiadne produkty z e-shopu. Použite sekciu Nastavenia.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
         </div>
