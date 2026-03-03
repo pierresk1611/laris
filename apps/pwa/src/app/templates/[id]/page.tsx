@@ -546,7 +546,7 @@ export default function TemplateDetailPage() {
                                             <RefreshCw className={isLoadingLayers ? 'animate-spin' : ''} size={20} />
                                             <span>
                                                 {isLoadingLayers ? 'NAČÍTAVAM VRSTVY...' :
-                                                    (currentExt === 'ai' && !layers.length ? 'ZÍSKAŤ VRSTVY Z AI (Vyžaduje Agenta)' : 'NAČÍTAŤ VRSTVY Z PSD')}
+                                                    (currentExt === 'ai' ? 'NAČÍTAŤ VRSTVY Z AI' : 'NAČÍTAŤ VRSTVY Z PSD')}
                                             </span>
                                         </button>
 
@@ -566,7 +566,7 @@ export default function TemplateDetailPage() {
                                         {isSourceFormat && (
                                             <p className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter text-center leading-tight">
                                                 {currentExt === 'ai'
-                                                    ? (layers.length > 0 ? "Vrstvy už boli extrahované Agentom. Mapovanie je dostupné offline." : "AI súbory vyžadujú lokálneho Agenta (Illustrator) na prečítanie vrstiev.")
+                                                    ? "Vykonáva sa v cloude extrakciou PDF textu. Agent nie je potrebný."
                                                     : "Vykonáva sa bleskovo v cloude bez nutnosti spusteného agenta."}
                                             </p>
                                         )}

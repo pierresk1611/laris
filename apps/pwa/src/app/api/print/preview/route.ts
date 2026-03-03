@@ -125,8 +125,8 @@ export async function POST(req: Request) {
                 // Return fallback error just in case it's an AI file not caught by search, or missing
                 return NextResponse.json({
                     success: false,
-                    error: `Šablóna sa nenašla alebo vyžaduje Agenta (.ai).`,
-                    requiresAgent: true
+                    error: `Šablóna sa nenašla. Skontrolujte cestu k súboru .psd alebo .ai.`,
+                    requiresAgent: false // Change to false if it's just a 404
                 });
             }
         }

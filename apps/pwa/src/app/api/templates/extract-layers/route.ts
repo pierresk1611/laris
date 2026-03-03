@@ -13,6 +13,25 @@ interface LayerInfo {
     mapping?: string | null;
 }
 
+/**
+ * Basic cleanup for PDF strings (octal escapes, etc.)
+ */
+function cleanupPdfText(text: string): string {
+    if (!text) return '';
+
+    // Handle Octal Escapes (\303\241 -> á)
+    let processed = text.replace(/\\([0-7]{3})/g, (match, octal) => {
+        return String.fromCharCode(parseInt(octal, 8));
+    });
+
+    // Handle Hex? (maybe later)
+
+    // Remove common PDF formatting/escapes
+    processed = processed.replace(/\\/g, '');
+
+    return processed.trim();
+}
+
 function extractLayersRecursive(children: any[]): LayerInfo[] {
     let layers: LayerInfo[] = [];
 
@@ -110,26 +129,7 @@ export async function POST(req: Request) {
             }, { status: 400 });
         }
 
-        // .ai files cannot be read by ag-psd in cloud, they need the local agent
-        if (ext === 'ai') {
-            // First check if DB already has layers extracted (e.g. from a past Agent run)
-            if (variant.layers && Array.isArray(variant.layers) && variant.layers.length > 0) {
-                console.log(`[CloudExtract] AI file detected, but layers already exist in DB. Returning saved layers.`);
-                const textLayerCount = variant.layers.filter((l: any) => l.type === 'TEXT').length;
-                return NextResponse.json({
-                    success: true,
-                    layers: variant.layers,
-                    textLayerCount
-                });
-            }
-
-            return NextResponse.json({
-                success: false,
-                error: 'AI súbory vyžadujú lokálneho Agenta (Illustrator). Počkajte na jeho pripojenie, alebo použite .psd.',
-            }, { status: 400 });
-        }
-
-        // ---- 3. CLOUD EXTRACTION (PSD ONLY) ----
+        // ---- 3. CLOUD EXTRACTION (.ai / .psd) ----
         const dbx = await getDropboxClient();
 
         console.log(`[CloudExtract] Downloading ${variant.path}...`);
@@ -146,33 +146,66 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, error: 'Nepodarilo sa stiahnuť súbor z Dropboxu' }, { status: 500 });
         }
 
-        console.log(`[CloudExtract] Parsing PSD...`);
+        let extractedLayers: LayerInfo[] = [];
 
-        // --- CMYK HOTFIX FOR METADATA EXTRACTION ---
-        // ag-psd explicitly throws an error for CMYK (4) files before even looking at the `skip*` flags.
-        // Because we only need the layer tree (metadata), we temporarily spoof the colorMode byte to RGB (3).
-        if (fileBuffer.length > 26 && fileBuffer.toString('latin1', 0, 4) === '8BPS') {
-            const colorMode = fileBuffer.readUInt16BE(24);
-            if (colorMode === 4) {
-                console.log(`[CloudExtract] CMYK PSD detected. Spoofing colorMode to RGB (3) for metadata extraction...`);
-                fileBuffer.writeUInt16BE(3, 24);
+        if (ext === 'ai') {
+            console.log(`[CloudExtract] AI file detected. Using cloud PDF-logic extraction...`);
+            // Attempt to extract text from PDF stream
+            const textContent = fileBuffer.toString('latin1');
+            const foundTexts = new Set<string>();
+
+            // Regex for PDF text in Tj and TJ operators
+            const tjRegex = /\((.*?)\)\s?Tj/g;
+            const TJRegex = /\[\s?\((.*?)\).*?\s?\]\s?TJ/g;
+
+            let match;
+            while ((match = tjRegex.exec(textContent)) !== null) {
+                const clean = cleanupPdfText(match[1]);
+                if (clean && clean.length > 2) foundTexts.add(clean);
+            }
+            while ((match = TJRegex.exec(textContent)) !== null) {
+                const clean = cleanupPdfText(match[1]);
+                if (clean && clean.length > 2) foundTexts.add(clean);
+            }
+
+            extractedLayers = Array.from(foundTexts).map(text => ({
+                name: text, // For AI, we use content as name since we don't have layer names reliably
+                type: 'TEXT',
+                content: text
+            }));
+
+            if (extractedLayers.length === 0) {
+                // Return descriptive error if no text found (maybe not PDF compatible)
+                return NextResponse.json({
+                    success: false,
+                    error: 'Z tohto AI súboru sa nepodarilo extrahovať text. Uistite sa, že je uložený s "Create PDF Compatible File", alebo použite .psd.',
+                }, { status: 400 });
+            }
+        } else {
+            console.log(`[CloudExtract] Parsing PSD...`);
+            // --- CMYK HOTFIX FOR METADATA EXTRACTION ---
+            if (fileBuffer.length > 26 && fileBuffer.toString('latin1', 0, 4) === '8BPS') {
+                const colorMode = fileBuffer.readUInt16BE(24);
+                if (colorMode === 4) {
+                    console.log(`[CloudExtract] CMYK PSD detected. Spoofing colorMode to RGB (3) for metadata extraction...`);
+                    fileBuffer.writeUInt16BE(3, 24);
+                }
+            }
+
+            let psd;
+            try {
+                psd = readPsd(fileBuffer, {
+                    skipLayerImageData: true,
+                    skipCompositeImageData: true,
+                    skipThumbnail: true,
+                    throwForMissingFeatures: false
+                });
+                extractedLayers = psd.children ? extractLayersRecursive(psd.children) : [];
+            } catch (parseErr: any) {
+                console.error(`[CloudExtract] ag-psd thrown error during metadata extraction:`, parseErr);
+                throw parseErr;
             }
         }
-
-        let psd;
-        try {
-            psd = readPsd(fileBuffer, {
-                skipLayerImageData: true,
-                skipCompositeImageData: true,
-                skipThumbnail: true,
-                throwForMissingFeatures: false
-            });
-        } catch (parseErr: any) {
-            console.error(`[CloudExtract] ag-psd thrown error during metadata extraction:`, parseErr);
-            throw parseErr;
-        }
-
-        const extractedLayers = psd.children ? extractLayersRecursive(psd.children) : [];
 
         // Check for Illustrator PDF compatibility warning
         const isNoPdfAi = extractedLayers.some(l =>
