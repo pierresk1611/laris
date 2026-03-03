@@ -8,84 +8,142 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 const AGENT_TOKEN = process.env.AGENT_ACCESS_TOKEN;
 const LOCAL_ROOT_PATH = process.env.LOCAL_ROOT_PATH;
 
+async function updateProgress(label, current, total) {
+    try {
+        await axios.post(`${API_URL}/agent/progress`, {
+            key: 'TEMPLATE_SCAN',
+            current,
+            total,
+            label
+        }, {
+            headers: { 'Authorization': `Bearer ${AGENT_TOKEN}` }
+        });
+    } catch (e) {
+        console.warn(`[ProgressUpdate] Failed: ${e.message}`);
+    }
+}
+
 /**
  * Scans the local filesystem for templates and syncs to DB.
- * Generates Dropbox Shared Links for previews.
+ * Follows Naming v2: ad_SKU_TYPE_NAME.psd
  */
 async function processSystemScan(job) {
     console.log(`[SystemScan] Starting scan of ${LOCAL_ROOT_PATH}...`);
-
-    // 1. Scan Local Files
-    // We assume templates are in a specific folder structure or just flattened?
-    // Based on previous context, they seem to be in directories like 'TEMPLATES' or root.
-    // Let's scan recursively or just specific known folders if configured.
-    // For now, let's scan the 'TEMPLATES' directory if it exists, otherwise root.
+    await updateProgress('Spúšťam skenovanie...', 0, 100);
 
     const templatesDir = path.join(LOCAL_ROOT_PATH, 'TEMPLATES');
     const targetDir = (await fs.exists(templatesDir)) ? templatesDir : LOCAL_ROOT_PATH;
 
     console.log(`[SystemScan] Target Directory: ${targetDir}`);
 
-    const files = await getFilesRecursive(targetDir);
-    const psdFiles = files.filter(f => f.toLowerCase().endsWith('.psd') || f.toLowerCase().endsWith('.psdt'));
+    const allFiles = await getFilesRecursive(targetDir);
+    const regex = /^ad_(.*?)_([OP])_(.*)\.(psd|ai)$/i;
 
-    console.log(`[SystemScan] Found ${psdFiles.length} PSD templates.`);
+    const skuGroups = {};
+
+    // 1. Parse and group files by SKU
+    for (const filePath of allFiles) {
+        const filename = path.basename(filePath);
+        const match = filename.match(regex);
+
+        if (match) {
+            const sku = match[1];
+            const typeLetter = match[2].toUpperCase(); // O or P
+            const originalName = match[3];
+            const type = typeLetter === 'O' ? 'MAIN' : 'INVITE';
+
+            if (!skuGroups[sku]) {
+                skuGroups[sku] = {
+                    sku: sku,
+                    name: originalName,
+                    files: []
+                };
+            }
+
+            skuGroups[sku].files.push({
+                localPath: filePath,
+                filename: filename,
+                type: type
+            });
+        }
+    }
+
+    const skus = Object.keys(skuGroups);
+    console.log(`[SystemScan] Found ${skus.length} unique templates (SKUs) based on naming convention.`);
+    await updateProgress(`Nájdených ${skus.length} šablón. Pripravujem náhľady...`, 5, 100);
 
     // 2. Prepare Data & Dropbox Links
     const dbx = await getDropboxClient();
     const updates = [];
 
-    // Batch processing to avoid rate limits?
-    // We'll process sequentially for safety in this first version
-
-    for (const psdPath of psdFiles) {
+    let processed = 0;
+    for (const sku of skus) {
         try {
-            const filename = path.basename(psdPath);
-            const key = filename.replace(/\.(psd|psdt)$/i, ''); // Simple key extraction
+            const group = skuGroups[sku];
+            const templateUpdate = {
+                sku: group.sku,
+                key: group.sku,
+                name: group.name,
+                files: []
+            };
 
-            // Look for a corresponding Preview Image (.jpg, .png)
-            // Usually same name: '001.psd' -> '001.jpg'
-            const jpgPath = psdPath.replace(/\.(psd|psdt)$/i, '.jpg');
-            const pngPath = psdPath.replace(/\.(psd|psdt)$/i, '.png');
+            for (const fileItem of group.files) {
+                // Look for a corresponding Preview Image (.jpg, .png)
+                const jpgPath = fileItem.localPath.replace(/\.(psd|ai|psdt)$/i, '.jpg');
+                const pngPath = fileItem.localPath.replace(/\.(psd|ai|psdt)$/i, '.png');
 
-            let previewPath = null;
-            if (await fs.exists(jpgPath)) previewPath = jpgPath;
-            else if (await fs.exists(pngPath)) previewPath = pngPath;
+                let previewPath = null;
+                if (await fs.exists(jpgPath)) previewPath = jpgPath;
+                else if (await fs.exists(pngPath)) previewPath = pngPath;
 
-            let sharedLink = null;
+                let sharedLink = null;
+                if (previewPath) {
+                    const relativePath = path.relative(LOCAL_ROOT_PATH, previewPath);
+                    const dbxPath = '/' + relativePath.split(path.sep).join('/');
+                    sharedLink = await getSharedLink(dbx, dbxPath);
+                }
 
-            if (previewPath) {
-                // Convert local path to Dropbox Path
-                // This requires knowing the relative path from the Dropbox Root
-                const relativePath = path.relative(LOCAL_ROOT_PATH, previewPath);
-                // Ensure dropbox style path (forward slashes, leading slash)
-                const dbxPath = '/' + relativePath.split(path.sep).join('/');
+                // Get shared link for the PSD/AI file itself for the PWA path reference
+                const fileRelPath = path.relative(LOCAL_ROOT_PATH, fileItem.localPath);
+                const fileDbxPath = '/' + fileRelPath.split(path.sep).join('/');
 
-                // Get or Create Shared Link
-                sharedLink = await getSharedLink(dbx, dbxPath);
+                templateUpdate.files.push({
+                    type: fileItem.type,
+                    path: fileDbxPath,
+                    imageUrl: sharedLink
+                });
+
+                // If this is the MAIN file (O), use its thumbnail for the main Template record
+                if (fileItem.type === 'MAIN') {
+                    templateUpdate.imageUrl = sharedLink;
+                }
             }
 
-            updates.push({
-                key: key,
-                name: key, // Use key as name for now
-                imageUrl: sharedLink,
-                // We could send local path too if needed for agent internal use, but DB is for UI
-            });
+            // Fallback if no MAIN file but has INVITE
+            if (!templateUpdate.imageUrl && templateUpdate.files.length > 0) {
+                templateUpdate.imageUrl = templateUpdate.files[0].imageUrl;
+            }
 
-            if (updates.length % 5 === 0) {
-                console.log(`[SystemScan] Processed ${updates.length}/${psdFiles.length}...`);
+            updates.push(templateUpdate);
+            processed++;
+
+            if (processed % 5 === 0 || processed === skus.length) {
+                const progressVal = Math.floor((processed / skus.length) * 80) + 10;
+                await updateProgress(`Spracovávam ${processed}/${skus.length}: ${sku}...`, progressVal, 100);
             }
 
         } catch (err) {
-            console.warn(`[SystemScan] Skipping ${psdPath}: ${err.message}`);
+            console.warn(`[SystemScan] Skipping SKU ${sku}: ${err.message}`);
         }
     }
 
     // 3. Send to API
     if (updates.length > 0) {
         console.log(`[SystemScan] Sending ${updates.length} templates to API...`);
-        // Send in chunks of 50
-        const chunkSize = 50;
+        await updateProgress(`Odosielam ${updates.length} položiek do databázy...`, 95, 100);
+
+        // Send in chunks of 20 - grouping makes objects larger
+        const chunkSize = 20;
         for (let i = 0; i < updates.length; i += chunkSize) {
             const chunk = updates.slice(i, i + chunkSize);
             await axios.post(`${API_URL}/templates`, { templates: chunk }, {
@@ -94,6 +152,7 @@ async function processSystemScan(job) {
         }
     }
 
+    await updateProgress('Skenovanie dokončené!', 100, 100);
     console.log(`[SystemScan] Completed.`);
 }
 

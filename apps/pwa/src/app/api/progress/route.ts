@@ -1,71 +1,82 @@
 import { NextResponse } from 'next/server';
 import { getSetting } from '@/lib/settings';
 
-export async function GET() {
-    try {
-        const syncProgressJson = await getSetting('SYNC_PROGRESS');
-        const aiProgressJson = await getSetting('AI_ANALYSIS_PROGRESS');
-        const bulkProgressJson = await getSetting('BULK_MAP_PROGRESS');
-        const wooSyncJson = await getSetting('WOO_SYNC_PROGRESS');
-        const wooProductsJson = await getSetting('WOO_PRODUCTS_PROGRESS');
+export async function GET(req: Request) {
+    const encoder = new TextEncoder();
 
-        let syncProgress = null;
-        let aiProgress = null;
-        let bulkProgress = null;
-        let wooSync = null;
-        let wooProducts = null;
+    const stream = new ReadableStream({
+        async start(controller) {
+            const send = (data: any) => {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+            };
 
-        if (syncProgressJson) {
-            try {
-                syncProgress = JSON.parse(syncProgressJson);
-                const lastUpdate = syncProgress.updatedAt ? new Date(syncProgress.updatedAt) : new Date();
-                if (Date.now() - lastUpdate.getTime() > 300000) syncProgress = null;
-            } catch (e) { }
+            const poll = async () => {
+                try {
+                    const [
+                        sync,
+                        ai,
+                        bulk,
+                        wooSync,
+                        wooProducts,
+                        templateScan
+                    ] = await Promise.all([
+                        getSetting('SYNC_PROGRESS'),
+                        getSetting('AI_ANALYSIS_PROGRESS'),
+                        getSetting('BULK_MAP_PROGRESS'),
+                        getSetting('WOO_SYNC_PROGRESS'),
+                        getSetting('WOO_PRODUCTS_PROGRESS'),
+                        getSetting('TEMPLATE_SCAN')
+                    ]);
+
+                    const parseProgress = (json: string | null, expiryMs: number = 300000) => {
+                        if (!json) return null;
+                        try {
+                            const data = JSON.parse(json);
+                            const updatedAt = new Date(data.updatedAt);
+                            if (Date.now() - updatedAt.getTime() > expiryMs) return null;
+                            return data;
+                        } catch (e) { return null; }
+                    };
+
+                    const syncData = parseProgress(sync);
+                    const aiData = parseProgress(ai, 60000);
+                    const bulkData = parseProgress(bulk);
+                    const wooSyncData = parseProgress(wooSync);
+                    const wooProductsData = parseProgress(wooProducts);
+                    const templateScanData = parseProgress(templateScan);
+
+                    // Send active ones
+                    if (syncData) send({ type: 'CATALOG_SYNC', ...syncData });
+                    if (aiData) send({ type: 'AI_ANALYSIS', ...aiData });
+                    if (bulkData) send({ type: 'BULK_MAP', ...bulkData });
+                    if (wooSyncData) send({ type: 'WOO_SYNC', ...wooSyncData });
+                    if (wooProductsData) send({ type: 'WOO_PRODUCTS', ...wooProductsData });
+                    if (templateScanData) send({ type: 'TEMPLATE_SCAN', ...templateScanData });
+
+                } catch (e) {
+                    console.error("[SSE] Poll error:", e);
+                }
+            };
+
+            // Initial poll
+            await poll();
+
+            // Setup interval
+            const interval = setInterval(poll, 2000);
+
+            // Cleanup
+            req.signal.addEventListener('abort', () => {
+                clearInterval(interval);
+                controller.close();
+            });
         }
+    });
 
-        if (aiProgressJson) {
-            try {
-                aiProgress = JSON.parse(aiProgressJson);
-                const updatedAt = new Date(aiProgress.updatedAt);
-                if (Date.now() - updatedAt.getTime() > 60000) aiProgress = null;
-            } catch (e) { }
-        }
-
-        if (bulkProgressJson) {
-            try {
-                bulkProgress = JSON.parse(bulkProgressJson);
-                const updatedAt = new Date(bulkProgress.updatedAt);
-                // 5 minutes validity for bulk
-                if (Date.now() - updatedAt.getTime() > 300000) bulkProgress = null;
-            } catch (e) { }
-        }
-
-        if (wooSyncJson) {
-            try {
-                wooSync = JSON.parse(wooSyncJson);
-                const updatedAt = new Date(wooSync.updatedAt);
-                if (Date.now() - updatedAt.getTime() > 300000) wooSync = null;
-            } catch (e) { }
-        }
-
-        if (wooProductsJson) {
-            try {
-                wooProducts = JSON.parse(wooProductsJson);
-                const updatedAt = new Date(wooProducts.updatedAt);
-                if (Date.now() - updatedAt.getTime() > 300000) wooProducts = null;
-            } catch (e) { }
-        }
-
-        return NextResponse.json({
-            success: true,
-            sync: syncProgress,
-            ai: aiProgress,
-            bulkMap: bulkProgress,
-            wooSync: wooSync,
-            wooProducts: wooProducts
-        });
-
-    } catch (error) {
-        return NextResponse.json({ success: false, error: 'Failed to fetch progress' }, { status: 500 });
-    }
+    return new Response(stream, {
+        headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        },
+    });
 }

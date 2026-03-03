@@ -13,6 +13,7 @@ interface WebProduct {
     sku: string | null;
     imageUrl: string | null;
     templateId: string | null;
+    matchConfidence: number | null;
 }
 
 interface TemplateOption {
@@ -233,11 +234,15 @@ export default function MappingClient({
             eventSource = new EventSource('/api/progress?client=mapping');
             eventSource.onmessage = (e) => {
                 const data = JSON.parse(e.data);
-                if (data.type === 'CATALOG_SYNC') {
-                    setSyncProgress(data.progress);
-                    setSyncLabel(data.message);
-                    if (data.progress >= 100) {
-                        setTimeout(() => setIsSyncing(false), 2000);
+                if (data.type === 'CATALOG_SYNC' || data.type === 'TEMPLATE_SCAN') {
+                    setSyncProgress(data.percentage);
+                    setSyncLabel(data.label);
+
+                    if (data.percentage >= 100 && data.status === 'DONE') {
+                        setTimeout(() => {
+                            setIsSyncing(false);
+                            window.location.reload(); // Refresh to see auto-paired templates
+                        }, 2000);
                         eventSource.close();
                     }
                 }
@@ -423,7 +428,14 @@ export default function MappingClient({
                                         )}
                                         <div className="flex flex-col items-start max-w-[400px]">
                                             <div className="font-bold text-slate-900 leading-tight text-sm mb-1">{p.title}</div>
-                                            <EditableSku initialSku={p.sku} productId={p.id} onSave={handleSkuSave} />
+                                            <div className="flex items-center gap-2">
+                                                <EditableSku initialSku={p.sku} productId={p.id} onSave={handleSkuSave} />
+                                                {p.matchConfidence === 1.0 && (
+                                                    <span className="mt-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-tighter rounded border border-emerald-200 shadow-sm animate-pulse">
+                                                        Spárované podľa SKU
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </td>

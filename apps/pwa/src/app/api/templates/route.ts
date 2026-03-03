@@ -57,28 +57,70 @@ export async function POST(request: Request) {
 
         for (const tpl of templates) {
             // Upsert template
-            // We assume 'key' is the unique identifier (e.g. "001", "AVU 15")
-            if (!tpl.key) continue;
+            // We now prefer 'sku' as the primary identifier if available, otherwise 'key'
+            if (!tpl.key && !tpl.sku) continue;
+
+            const templateKey = tpl.sku || tpl.key;
 
             const result = await prisma.template.upsert({
-                where: { key: tpl.key },
+                where: { key: templateKey },
                 update: {
-                    name: tpl.name || tpl.key,
-                    imageUrl: tpl.imageUrl, // Shared Link from Dropbox
+                    name: tpl.name || templateKey,
+                    sku: tpl.sku || null,
+                    imageUrl: tpl.imageUrl || undefined,
                     updatedAt: new Date()
                 },
                 create: {
-                    key: tpl.key,
-                    name: tpl.name || tpl.key,
+                    key: templateKey,
+                    sku: tpl.sku || null,
+                    name: tpl.name || templateKey,
                     status: "NEEDS_REVIEW",
                     imageUrl: tpl.imageUrl,
                     mappedPaths: 0
                 }
             });
 
-            // Track stats roughly
-            // (prisma.upsert doesn't explicitly tell us if it created or updated easily without checking created date, 
-            // but strictly speaking we just want to know it succeeded)
+            // Handle Template Files
+            if (tpl.files && Array.isArray(tpl.files)) {
+                for (const file of tpl.files) {
+                    await prisma.templateFile.upsert({
+                        where: {
+                            templateId_type: {
+                                templateId: result.id,
+                                type: file.type || 'MAIN'
+                            }
+                        },
+                        update: {
+                            path: file.path,
+                            imageUrl: file.imageUrl || undefined
+                        },
+                        create: {
+                            templateId: result.id,
+                            type: file.type || 'MAIN',
+                            path: file.path,
+                            imageUrl: file.imageUrl
+                        }
+                    });
+                }
+            }
+
+            // AUTO-PAIRING LOGIC
+            if (tpl.sku) {
+                const products = await prisma.webProduct.findMany({
+                    where: { sku: tpl.sku }
+                });
+
+                if (products.length > 0) {
+                    await prisma.webProduct.updateMany({
+                        where: { sku: tpl.sku },
+                        data: {
+                            templateId: result.id,
+                            matchConfidence: 1.0
+                        }
+                    });
+                    console.log(`[AutoPair] Matched ${products.length} products to template ${templateKey}`);
+                }
+            }
         }
 
         return NextResponse.json({ success: true, count: templates.length });

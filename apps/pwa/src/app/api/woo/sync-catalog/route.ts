@@ -59,6 +59,17 @@ async function upsertWebProducts(items: any[], shopId: string, shopName: string)
             }
         });
 
+        let templateId = null;
+        let matchConfidence = null;
+
+        if (sku) {
+            const template = await prisma.template.findUnique({ where: { sku: sku } });
+            if (template) {
+                templateId = template.id;
+                matchConfidence = 1.0;
+            }
+        }
+
         if (existing) {
             await prisma.webProduct.update({
                 where: { id: existing.id },
@@ -68,7 +79,9 @@ async function upsertWebProducts(items: any[], shopId: string, shopName: string)
                     imageUrl: imageUrl || existing.imageUrl,
                     permalink: permalink || existing.permalink,
                     shopId: shopId,
-                    shopName: shopName
+                    shopName: shopName,
+                    templateId: templateId || existing.templateId,
+                    matchConfidence: matchConfidence || existing.matchConfidence
                 }
             });
         } else {
@@ -79,7 +92,9 @@ async function upsertWebProducts(items: any[], shopId: string, shopName: string)
                     title: title,
                     sku: sku,
                     imageUrl: imageUrl,
-                    permalink: permalink
+                    permalink: permalink,
+                    templateId: templateId,
+                    matchConfidence: matchConfidence
                 }
             });
         }
@@ -132,11 +147,11 @@ async function runSync(shop: any) {
             upsertedCount += chunkCount;
         }
 
-        await updateProgress('CATALOG_SYNC', 100, 100, `Hotovo! Uložených ${upsertedCount} položiek.`);
+        await updateProgress('CATALOG_SYNC', 100, 100, `Hotovo! Uložených ${upsertedCount} položiek.`, 'DONE');
         console.log(`[Job Success] Catalog sync finished. Upserted ${upsertedCount} items.`);
     } catch (e: any) {
         console.error("[Job Error] Catalog sync failed:", e);
-        await updateProgress('CATALOG_SYNC', 0, 100, `Chyba zlyhania procesu: ${e.message}`);
+        await updateProgress('CATALOG_SYNC', 0, 100, `Chyba: ${e.message}`, 'ERROR');
     }
 }
 

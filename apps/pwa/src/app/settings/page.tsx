@@ -876,6 +876,31 @@ export default function SettingsPage() {
                             </div>
                         </div>
                         <div className="mt-8 grid grid-cols-2 gap-4">
+                            <button
+                                onClick={async () => {
+                                    if (confirm("Naozaj chcete vymazať všetky šablóny a ich mapovania? Súbory na Dropboxe zostanú nedotknuté.")) {
+                                        setSaving('RESET_TEMPLATES');
+                                        try {
+                                            const res = await fetch('/api/maintenance/reset-templates', { method: 'POST' });
+                                            const result = await res.json();
+                                            if (result.success) {
+                                                alert(result.message);
+                                                fetchSettings();
+                                            } else {
+                                                alert("Chyba: " + result.error);
+                                            }
+                                        } catch (e: any) {
+                                            alert("Chyba spojenia: " + e.message);
+                                        } finally {
+                                            setSaving(null);
+                                        }
+                                    }
+                                }}
+                                disabled={saving !== null}
+                                className="py-4 bg-red-50 border border-red-100 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-100 disabled:opacity-50"
+                            >
+                                {saving === 'RESET_TEMPLATES' ? 'Mažem...' : 'Vymazať dáta šablón'}
+                            </button>
                             <button className="py-4 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-100">
                                 Re-indexovať šablóny
                             </button>
