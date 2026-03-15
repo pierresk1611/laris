@@ -175,10 +175,22 @@ export async function POST(req: Request) {
             }));
 
             if (extractedLayers.length === 0) {
+                // Ensure Agent is notified to try extracting it locally (since cloud failed)
+                await prisma.job.create({
+                    data: {
+                        type: 'EXTRACT_LAYERS',
+                        status: 'PENDING',
+                        payload: {
+                            templateId: template.key,
+                            path: variant.path
+                        }
+                    }
+                });
+
                 // Return descriptive error if no text found (maybe not PDF compatible)
                 return NextResponse.json({
                     success: false,
-                    error: 'Z tohto AI súboru sa nepodarilo extrahovať text. Uistite sa, že je uložený s "Create PDF Compatible File", alebo použite .psd.',
+                    error: 'Tento súbor čaká na sken. Zapnite Agenta.',
                 }, { status: 400 });
             }
         } else {

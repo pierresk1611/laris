@@ -105,6 +105,30 @@ export async function PATCH(req: Request) {
                     });
                 }
 
+                // ALSO update the TemplateFile layers!
+                if (payload.path && template?.id) {
+                    await prisma.templateFile.updateMany({
+                        where: {
+                            templateId: template.id,
+                            path: payload.path
+                        },
+                        data: {
+                            layers: layers as any
+                        }
+                    });
+                } else if (template?.id) {
+                    // Fallback to MAIN if path is unknown
+                    await prisma.templateFile.updateMany({
+                        where: {
+                            templateId: template.id,
+                            type: 'MAIN'
+                        },
+                        data: {
+                            layers: layers as any
+                        }
+                    });
+                }
+
                 // AI AUTO-MAPPING TRIGGER (For Bulk or Auto-Map flow)
                 if (payload.isBulk || payload.autoMap) {
                     try {

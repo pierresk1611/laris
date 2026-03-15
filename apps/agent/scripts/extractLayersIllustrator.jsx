@@ -1,3 +1,4 @@
+app.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
 function getLayers() {
     var layers = [];
     if (app.documents.length === 0) return "[]";
