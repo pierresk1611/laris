@@ -34,6 +34,39 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
             }
         });
 
+        // --- AI Pattern Auto-Learning ---
+        // If the user modified the AI extracted text (body !== originalBody), save it as a pattern
+        for (const item of items) {
+            if (item.aiData && item.aiData.originalBody && item.aiData.body) {
+                if (item.aiData.originalBody.trim() !== item.aiData.body.trim()) {
+                    try {
+                        // Store the original snippet we sent to AI, and the expected output the user just corrected
+
+                        const inputStr = `names: ${item.aiData.names || ""}\ndate: ${item.aiData.date || ""}\nlocation: ${item.aiData.location || ""}\nbody: ${item.aiData.originalBody}`;
+
+                        // Let's form the expected corrected output
+                        const expectedOutput = {
+                            names: item.aiData.names || "",
+                            date: item.aiData.date || "",
+                            location: item.aiData.location || "",
+                            body: item.aiData.body // The corrected version
+                        };
+
+                        await (prisma as any).aiPattern.create({
+                            data: {
+                                input: inputStr,
+                                output: expectedOutput
+                            }
+                        });
+                        console.log(`[AI Learning] Saved user correction for order ${id}, item ${item.id}`);
+                    } catch (e) {
+                        console.error("[AI Learning] Failed to save pattern:", e);
+                    }
+                }
+            }
+        }
+        // --------------------------------
+
         return NextResponse.json({ success: true, localState });
 
     } catch (error: any) {
