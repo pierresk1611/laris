@@ -179,6 +179,20 @@ export async function POST(req: Request) {
                     }
                 });
 
+                if (extension === '.ai') {
+                    // Automatically trigger an extract layers job to get the AI preview generated
+                    await prisma.job.create({
+                        data: {
+                            type: 'EXTRACT_LAYERS',
+                            status: 'PENDING',
+                            payload: {
+                                templateId: template.key,
+                                path: pathDisplay
+                            }
+                        }
+                    });
+                }
+
                 // Ensure it's not in Inbox
                 // @ts-ignore
                 await prisma.fileInbox.deleteMany({ where: { path: pathDisplay } });
@@ -267,6 +281,20 @@ export async function POST(req: Request) {
                         extension: extension
                     }
                 });
+
+                if (extension === '.ai') {
+                    // Automatically trigger an extract layers job to get the AI preview generated
+                    await prisma.job.create({
+                        data: {
+                            type: 'EXTRACT_LAYERS',
+                            status: 'PENDING',
+                            payload: {
+                                templateId: template.key,
+                                path: pathDisplay
+                            }
+                        }
+                    });
+                }
 
                 // Ensure it's not in Inbox
                 // @ts-ignore

@@ -80,8 +80,10 @@ async function processJob(job) {
         } else if (job.type === 'SYSTEM_SCAN') {
             const { processSystemScan } = require('./lib/system-scan');
             await processSystemScan(job);
+        } else if (job.type === 'MERGE_SHEET') {
+            await processMergeSheet(job);
         } else {
-            // Default to Photoshop for RENDER_PSD, MERGE_SHEET, etc.
+            // Default to Photoshop for RENDER_PSD, etc.
             await processPhotoshopJob(job);
         }
     } catch (error) {
@@ -174,13 +176,41 @@ async function processIllustratorLayerScan(job) {
             });
         });
 
-        // Wait for result file
+        // Read Result JSON
         const result = await waitForFile(resultFile, null, 30000);
         if (result.status === 'ERROR') throw new Error("Illustrator script failed");
 
+        // Upload AI preview if it was generated
+        let previewPath = null;
+        const previewFile = path.join(os.tmpdir(), "ai_preview.jpg");
+        if (await fs.exists(previewFile)) {
+            console.log(`[Job ${job.id}] Uploading AI preview to Dropbox...`);
+            const dbx = await getDropboxClient();
+            const dropboxPreviewPath = `/PREVIEWS/${path.basename(filePath, '.ai')}_preview.jpg`;
+            await dbx.filesUpload({
+                path: dropboxPreviewPath,
+                contents: await fs.readFile(previewFile),
+                mode: 'overwrite'
+            });
+
+            try {
+                const linkRes = await dbx.sharingCreateSharedLinkWithSettings({ path: dropboxPreviewPath });
+                previewPath = linkRes.result.url.replace('dl=0', 'raw=1');
+            } catch (e) {
+                if (e.error && e.error.error_summary && e.error.error_summary.includes('shared_link_already_exists')) {
+                    const links = await dbx.sharingListSharedLinks({ path: dropboxPreviewPath });
+                    if (links.result.links.length > 0) {
+                        previewPath = links.result.links[0].url.replace('dl=0', 'raw=1');
+                    }
+                }
+            }
+            await fs.remove(previewFile);
+        }
+
         await updateJobStatus(job.id, 'DONE', {
             layers: result, // result is the parsed JSON array
-            isAi: true
+            isAi: true,
+            previewUrl: previewPath
         });
 
         // Cleanup temp if downloaded
@@ -326,6 +356,107 @@ async function processPhotoshopJob(job) {
     });
 
     // Cleanup
+    await fs.remove(payloadPath);
+    await fs.remove(wrapperScriptPath);
+    await fs.remove(resultFile);
+}
+
+// --- MERGE SHEET JOB ---
+async function processMergeSheet(job) {
+    const payloadData = job.payload || job.data || {};
+    const jobId = job.id;
+
+    console.log(`[Job ${jobId}] Preparing Sheet Imposition...`);
+
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dayPath = path.join(LOCAL_ROOT_PATH, 'OUTPUT', `${year}`, `${month}`, `${day}`);
+
+    const outputDir = path.join(dayPath, `Batches`);
+    await fs.ensureDir(outputDir);
+
+    const ordersWithPaths = [];
+    for (const order of payloadData.orders || []) {
+        let orderDir = null;
+        try {
+            const potentialFolders = await fs.readdir(dayPath);
+            const found = potentialFolders.find(f => {
+                if (!f.toLowerCase().includes('order') && !f.match(/^\d/)) return false;
+                return f.includes(String(order.id)) || (order.crmId && f.includes(String(order.crmId)));
+            });
+            if (found) orderDir = path.join(dayPath, found);
+        } catch (e) { }
+
+        let pdfPath = null;
+        if (orderDir) {
+            const files = await fs.readdir(orderDir);
+            const printFile = files.find(f => f.endsWith('_Print.pdf') || f.endsWith('_CMYK.pdf') || f.endsWith('_METAL.pdf'));
+            if (printFile) {
+                pdfPath = path.join(orderDir, printFile);
+            }
+        }
+
+        ordersWithPaths.push({
+            ...order,
+            pdfPath: pdfPath,
+            quantity: 1 // Print Manager duplicates the rects in layout, we just place it once per order object passed or let Photoshop loop over layout boxes. Wait, the layout has multiple boxes.
+        });
+    }
+
+    const payload = {
+        jobId: job.id,
+        outputDir: outputDir,
+        layout: payloadData.layout,
+        sheetFormat: payloadData.sheetFormat,
+        orders: ordersWithPaths
+    };
+
+    const payloadPath = path.join(os.tmpdir(), `job_${job.id}.json`);
+    await fs.writeJson(payloadPath, payload);
+
+    const scriptPath = path.join(__dirname, '../scripts/merge_sheet.jsx');
+    const wrapperScriptPath = path.join(os.tmpdir(), `run_job_${job.id}.jsx`);
+    const wrapperContent = `
+        #include "${scriptPath.replace(/\\/g, '\\\\')}"
+        try {
+            main("${payloadPath.replace(/\\/g, '\\\\')}"); 
+        } catch(e) {
+            var f = new File("${payloadPath.replace(/\\/g, '\\\\')}".replace("job_", "error_"));
+            f.open("w"); f.write(JSON.stringify({status:"ERROR", message: e.toString()})); f.close();
+        }
+    `;
+    await fs.writeFile(wrapperScriptPath, wrapperContent);
+
+    const appleScript = `
+        try
+            tell application "${PHOTOSHOP_APP_NAME}"
+                if it is running then
+                    close every document saving no
+                end if
+            end tell
+        end try
+    `;
+    try {
+        await new Promise((resolve) => {
+            exec(`osascript -e '${appleScript}'`, resolve);
+        });
+    } catch (e) { }
+
+    exec(`open -a "${PHOTOSHOP_APP_NAME}" "${wrapperScriptPath}"`);
+
+    const resultFile = path.join(os.tmpdir(), `result_${job.id}.json`);
+    const errorFile = path.join(os.tmpdir(), `error_${job.id}.json`);
+    const result = await waitForFile(resultFile, errorFile, 120000);
+
+    if (result.status === 'ERROR') throw new Error(result.message);
+
+    await updateJobStatus(job.id, 'DONE', {
+        files: result.files,
+        outputDir: outputDir
+    });
+
     await fs.remove(payloadPath);
     await fs.remove(wrapperScriptPath);
     await fs.remove(resultFile);

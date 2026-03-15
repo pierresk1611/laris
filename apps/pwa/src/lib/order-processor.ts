@@ -10,6 +10,7 @@ export interface ProcessedItem {
     templateKey: string | null;
     templateId: string | null;
     templateStatus?: string; // NEW
+    templateName?: string; // NEW: Display name
     hasInvitation: boolean;
     material: string | null;
     options: Record<string, any>;
@@ -49,18 +50,18 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
             return [];
         });
 
-        interface TemplateInfo { id: string, isVerified: boolean, key: string, status: string };
+        interface TemplateInfo { id: string, isVerified: boolean, key: string, status: string, name: string };
 
         // Map by Key (Legacy/Regex fallback)
         const templateMap = new Map<string, TemplateInfo>((templates as any[]).map((t: any) => [
             t.key?.toUpperCase() || "UNKNOWN",
-            { id: t.id, isVerified: t.isVerified, key: t.key, status: t.status }
+            { id: t.id, isVerified: t.isVerified, key: t.key, status: t.status, name: t.displayName || t.name }
         ]));
 
         // Map by SKU (Native/Golden Key)
         const skuMap = new Map<string, TemplateInfo>((templates as any[]).filter(t => t.sku).map((t: any) => [
             t.sku.toUpperCase(),
-            { id: t.id, isVerified: t.isVerified, key: t.key, status: t.status }
+            { id: t.id, isVerified: t.isVerified, key: t.key, status: t.status, name: t.displayName || t.name }
         ]));
 
         // 2. Pre-fetch all WebProducts to utilize Smart Match logic
@@ -74,12 +75,12 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
 
         const webProductSkuMap = new Map<string, TemplateInfo>((webProducts as any[]).filter(p => p.sku).map((p: any) => [
             p.sku.toUpperCase(),
-            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key, status: p.template.status }
+            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key, status: p.template.status, name: p.template.displayName || p.template.name }
         ]));
 
         const webProductTitleMap = new Map<string, TemplateInfo>((webProducts as any[]).map((p: any) => [
             p.title.trim().toLowerCase(),
-            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key, status: p.template.status }
+            { id: p.template.id, isVerified: p.template.isVerified, key: p.template.key, status: p.template.status, name: p.template.displayName || p.template.name }
         ]));
 
         const processedOrders: ProcessedOrder[] = [];
@@ -206,6 +207,7 @@ export async function processOrders(rawOrders: any[], shopSource: string, shopNa
                         templateKey,
                         templateId: templateInfo?.id || null,
                         templateStatus: templateInfo?.status,
+                        templateName: templateInfo?.name,
                         hasInvitation: needsInvitation(item.name || "", metaData),
                         material: epo.material || null,
                         options: epo,

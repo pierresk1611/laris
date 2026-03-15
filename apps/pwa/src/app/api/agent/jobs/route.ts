@@ -79,31 +79,30 @@ export async function PATCH(req: Request) {
                 const existingVariants: any[] = Array.isArray(template?.variants) ? template.variants : [];
 
                 // If it's a simple extraction (not SCAN_LAYERS with verification)
+                const updateData: any = { mappingData: { layers } };
+                if (resultData.previewUrl) {
+                    updateData.imageUrl = resultData.previewUrl;
+                }
+
                 if (job.type === 'EXTRACT_LAYERS') {
                     // Update current variant (default MAIN) with the new layers count for UI feedback
+                    updateData.mappedPaths = totalTextLayers;
+                    updateData.status = 'NEEDS_REVIEW';
                     await prisma.template.update({
                         where: { key: templateId },
-                        data: {
-                            mappedPaths: totalTextLayers, // Using this as "processed layers" count for initial UI feedback
-                            status: 'NEEDS_REVIEW' // Move from ERROR/UNMAPPED to NEEDS_REVIEW once layers are known
-                        }
+                        data: updateData
                     });
                 } else if (job.type === 'SCAN_LAYERS') {
                     // Verification Logic (Existing)
                     const requiredLayers = ['NAME_MAIN', 'DATE_MAIN', 'BODY_FULL'];
                     const hasRequiredLayer = Array.isArray(layers) && layers.some((l: any) => requiredLayers.includes(typeof l === 'string' ? l : l.name));
 
-                    if (hasRequiredLayer) {
-                        await prisma.template.update({
-                            where: { key: templateId },
-                            data: { isVerified: true, status: 'ACTIVE', mappingData: { layers } }
-                        });
-                    } else {
-                        await prisma.template.update({
-                            where: { key: templateId },
-                            data: { isVerified: false, status: 'UNMAPPED', mappingData: { layers } }
-                        });
-                    }
+                    updateData.isVerified = hasRequiredLayer;
+                    updateData.status = hasRequiredLayer ? 'ACTIVE' : 'UNMAPPED';
+                    await prisma.template.update({
+                        where: { key: templateId },
+                        data: updateData
+                    });
                 }
 
                 // AI AUTO-MAPPING TRIGGER (For Bulk or Auto-Map flow)
